@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -42,9 +43,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import sg.com.tertiarycourses.ai4kids.cards.BrainArcadeScreen
 import sg.com.tertiarycourses.ai4kids.data.LocalProgressStore
 import sg.com.tertiarycourses.ai4kids.model.Activity
-import sg.com.tertiarycourses.ai4kids.ui.activities.BrainGamesScreen
 import sg.com.tertiarycourses.ai4kids.ui.activities.CodePuzzlesScreen
 import sg.com.tertiarycourses.ai4kids.ui.activities.PhonicsScreen
 import sg.com.tertiarycourses.ai4kids.ui.activities.StoryBuilderScreen
@@ -62,6 +63,7 @@ import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
 fun RootScreen(modifier: Modifier = Modifier) {
     var selected by remember { mutableStateOf<Activity?>(null) }
     var showParents by remember { mutableStateOf(false) }
+    var showArcade by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
         LazyVerticalGrid(
@@ -79,6 +81,9 @@ fun RootScreen(modifier: Modifier = Modifier) {
             items(Activity.entries.toList(), key = { it.id }) { activity ->
                 ActivityCard(activity = activity) { selected = activity }
             }
+            item(key = "arcade") {
+                ArcadeCard(onOpen = { showArcade = true })
+            }
         }
     }
 
@@ -87,12 +92,63 @@ fun RootScreen(modifier: Modifier = Modifier) {
             Activity.PHONICS -> PhonicsScreen(onClose = { selected = null })
             Activity.STORY -> StoryBuilderScreen(onClose = { selected = null })
             Activity.CODE -> CodePuzzlesScreen(onClose = { selected = null })
-            Activity.BRAIN -> BrainGamesScreen(onClose = { selected = null })
         }
+    }
+
+    if (showArcade) {
+        BrainArcadeScreen(onClose = { showArcade = false })
     }
 
     if (showParents) {
         ParentsCornerSheet(onDismiss = { showParents = false })
+    }
+}
+
+/** An activity-style tile that opens the online Brain Arcade card games. */
+@Composable
+private fun ArcadeCard(onOpen: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "arcadeScale",
+    )
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier
+            .scale(scale)
+            .fillMaxWidth()
+            .heightIn(min = 230.dp)
+            .kidCard()
+            .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
+            .padding(24.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(88.dp)
+                    .clip(CircleShape)
+                    .background(Theme.Green),
+            ) {
+                Icon(Icons.Filled.Psychology, contentDescription = null, tint = Color.White, modifier = Modifier.size(44.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(Theme.Green.copy(alpha = 0.15f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                Text("Online", color = Theme.Green, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Text("Brain Arcade", color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
+        Text("Card games with friends", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 17.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.weight(1f))
+        Text("🃏 6 games", color = Theme.Ink.copy(alpha = 0.7f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 

@@ -7,9 +7,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ChildCare
-import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,9 +56,14 @@ fun ParentsCornerSheet(onDismiss: () -> Unit) {
             Text("Parents' Corner", color = Theme.Ink, fontSize = 28.sp, fontWeight = FontWeight.Black)
 
             SectionTitle("About AI4Kids")
-            InfoRow(Icons.Filled.WifiOff, "Plays fully offline — no internet needed")
-            InfoRow(Icons.Filled.PanTool, "No login, no ads, no data collected")
+            InfoRow(Icons.Filled.WifiOff, "Learning activities & solo card games play fully offline — no login needed")
+            InfoRow(Icons.Filled.Block, "No ads, ever")
             InfoRow(Icons.Filled.ChildCare, "Designed for ages 4–16")
+
+            SectionTitle("Brain Arcade (online play)")
+            InfoRow(Icons.Filled.Groups, "Optional multiplayer card games — play with friends using a room code")
+            InfoRow(Icons.Filled.Lock, "Online multiplayer requires signing in with an ai4kids kid account; solo play never does")
+            InfoRow(Icons.Filled.Wifi, "Online games connect to ai4kids only to sync play between friends")
 
             SectionTitle("Progress")
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

@@ -59,5 +59,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
+    // Networking for the online "Brain Arcade" card games (talks to the
+    // ai4kids Next.js backend: NextAuth login + /api/learn/cards/* endpoints).
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import sg.com.tertiarycourses.ai4kids.cards.CardApi
 import sg.com.tertiarycourses.ai4kids.data.LocalProgressStore
 import sg.com.tertiarycourses.ai4kids.data.ProgressStore
 import sg.com.tertiarycourses.ai4kids.ui.RootScreen
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        CardApi.init(applicationContext)
         setContent {
             val progress = remember { ProgressStore(applicationContext) }
             AI4KidsTheme {

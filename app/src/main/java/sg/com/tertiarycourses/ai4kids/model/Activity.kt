@@ -3,14 +3,13 @@ package sg.com.tertiarycourses.ai4kids.model
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
 
 /**
- * One of the four on-device learning activities offered on the home screen.
+ * One of the on-device learning activities offered on the home screen.
  * All content runs fully offline — no login, no network, no data collection.
  * This is the Android port of the iOS `Activity` enum.
  */
@@ -50,14 +49,6 @@ enum class Activity(
         color = Theme.Blue,
         ageBand = "Ages 10–12",
         icon = Icons.Filled.Extension,
-    ),
-    BRAIN(
-        id = "brain",
-        title = "Brain Games",
-        subtitle = "Memory & matching fun",
-        color = Theme.Green,
-        ageBand = "All ages",
-        icon = Icons.Filled.Psychology,
     );
 
     companion object {

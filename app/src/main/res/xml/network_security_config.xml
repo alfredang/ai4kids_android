@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Production traffic (e.g. https://ai4kids.tertiarycourses.com.sg) uses HTTPS.
+  Cleartext is permitted ONLY to local dev hosts so the app can talk to a
+  Next.js dev server during development:
+    - 10.0.2.2  : the host machine as seen from the Android emulator
+    - localhost : on-device / reverse-tcp setups
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

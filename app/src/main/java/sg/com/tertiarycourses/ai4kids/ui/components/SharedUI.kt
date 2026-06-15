@@ -82,7 +82,7 @@ fun KidButton(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
         modifier = modifier
             .scale(scale)
             .softShadow(shape)
