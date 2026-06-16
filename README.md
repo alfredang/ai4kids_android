@@ -32,18 +32,35 @@ kid-first learning app built around four bright activity cards on a single home 
 Kids earn ⭐️ stars for completing rounds, the home header keeps a running total, and a
 **Parents' Corner** explains the privacy stance and can reset progress.
 
-The three core learning activities run **fully offline** — no login, no network, no data
-collection; progress is stored locally on the device. The newer **Brain Arcade** adds
-**online multiplayer card games**, which require a sign-in and an internet connection.
+The core learning activities are **offline-first** — no login, progress stored locally on
+the device. **Phonics Quest** can optionally call Google **Gemini** for a "Phonics Buddy"
+that gives spoken hints and praise (off unless an API key is set; the games stay fully
+playable without it). The **Brain Arcade** adds **online multiplayer card games**, which
+require a sign-in and an internet connection.
 
 ### Activities
 
 | Activity | Ages | What it does | Connectivity |
 | --- | --- | --- | --- |
-| 🔤 **Phonics Playground** | 4–6 | Match letters & sounds — *"Coming soon" placeholder while the new design is finalized* | Offline |
+| 🔤 **Phonics Quest** | 4–6 | An adventure map of phonics "worlds" — listen to sounds, build words, find rhymes; spoken with on-device TextToSpeech | Offline (+ optional AI) |
 | 📖 **Story Builder** | 7–9 | Pick a hero, a place & a magic item; the app weaves a short illustrated story | Offline |
 | 🧩 **Code Puzzles** | 10–12 | Sequence arrow steps to walk a robot 🤖 to the star ⭐️ (algorithmic thinking) | Offline |
 | 🧠 **Brain Arcade** | All | Six multiplayer **card games** — play solo, co-op, or versus friends | Online |
+
+### Phonics Quest — the five worlds
+
+A map of phonics "worlds"; clearing one (≥1 star) unlocks the next, and each world earns up
+to **3 stars**. Letters, sounds and words are spoken on-device (`TextToSpeech`). When a
+Gemini key is configured, an **"Ask Buddy"** button adds a kid-friendly hint and the
+completion screen reads out personalized praise.
+
+| World | Game | Skill |
+| --- | --- | --- |
+| 🅰️ **Letters Land** | Pop the Phoneme | Hear three numbered sounds, pick the starting sound (letter hidden) |
+| 🌉 **Blend Bridge** | Build the Word | Spell a short word from shuffled letter tiles |
+| 🤫 **Whisper Woods** | Build the Word | Spell words with **silent letters** (lamb, knife, ghost…) |
+| 🎵 **Rhyme Road** | Rhyme Time | Pick the picture/word that **rhymes** with the target |
+| 👑 **Story Kingdom** | Listen & Find | Hear a word, choose it among **similar-sounding** words |
 
 ### Brain Arcade — the six card games
 
@@ -66,9 +83,11 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
 | **Language** | Kotlin 2.0.21 |
 | **UI** | Jetpack Compose + Material 3 (Compose BOM 2024.09.03) |
 | **Architecture** | Single-Activity, 100% Compose; shared state via `CompositionLocal` |
-| **Networking** | OkHttp 4.12.0 (Brain Arcade only) |
+| **Audio** | Android `TextToSpeech` (on-device, offline) for Phonics |
+| **AI (optional)** | Google Gemini API (`gemini-2.5-flash`) for the Phonics Buddy |
+| **Networking** | OkHttp 4.12.0 (Brain Arcade + optional Phonics AI) |
 | **Auth** | NextAuth credentials flow, session cookie persisted locally |
-| **Persistence** | `SharedPreferences` (stars + best times + session cookie) |
+| **Persistence** | `SharedPreferences` (activity + phonics stars, best times, session cookie) |
 | **Build** | Gradle (Kotlin DSL), Android Gradle Plugin 8.5.2 |
 | **SDK** | Min SDK 24 (Android 7.0) · Target/Compile SDK 34 · JVM 17 |
 
@@ -87,7 +106,7 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
           ▼              ▼               ▼                ▼
    ┌────────────┐ ┌────────────┐ ┌─────────────┐ ┌──────────────────┐
    │  Phonics   │ │   Story    │ │    Code     │ │   Brain Arcade   │
-   │ (offline)  │ │ (offline)  │ │  (offline)  │ │    (online)      │
+   │ (TTS +AI)  │ │ (offline)  │ │  (offline)  │ │    (online)      │
    └────────────┘ └────────────┘ └─────────────┘ └────────┬─────────┘
         offline activities award stars via ProgressStore   │
                                                             ▼
@@ -107,17 +126,22 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
 ```
 app/src/main/java/sg/com/tertiarycourses/ai4kids/
 ├── MainActivity.kt              # Entry point; CardApi.init + shared ProgressStore
-├── model/Activity.kt            # The offline activities (title, color, age band, icon)
+├── model/Activity.kt            # The home activities (title, color, age band, icon)
 ├── data/ProgressStore.kt        # Local star tally, persisted to SharedPreferences
+├── ai/
+│   └── GeminiClient.kt          # Optional Gemini calls for the Phonics Buddy
 ├── ui/
 │   ├── theme/Theme.kt           # Brand palette, shapes, shadows, background gradient
 │   ├── RootScreen.kt            # Home grid of activity cards + Brain Arcade tile
 │   ├── ParentsCornerSheet.kt    # Privacy info + reset progress
 │   ├── components/SharedUI.kt   # KidButton, StarBadge, CloseButton, CelebrationView
 │   └── activities/
-│       ├── PhonicsScreen.kt     # Placeholder ("Coming soon")
 │       ├── StoryBuilderScreen.kt
-│       └── CodePuzzlesScreen.kt
+│       ├── CodePuzzlesScreen.kt
+│       └── phonics/             # Phonics Quest
+│           ├── PhonicsContent.kt   # 5 worlds + per-stage star store
+│           ├── PhonicsGames.kt     # Mini-games + TextToSpeech speaker + Gemini Buddy
+│           └── PhonicsScreen.kt    # Adventure map + stage host
 └── cards/                       # Online "Brain Arcade" card games
     ├── CardApi.kt               # OkHttp client: NextAuth login + 5 card endpoints
     ├── CardGameMeta.kt          # Catalogue of the six games + modes
@@ -165,11 +189,24 @@ server, the app permits cleartext to `10.0.2.2`, `localhost`, and `127.0.0.1` (s
 `res/xml/network_security_config.xml`); the base URL is stored in `SharedPreferences`.
 A valid AI4Kids account is required to sign in for online play.
 
+### Phonics AI (optional)
+
+Phonics Quest's "Buddy" uses Google Gemini for spoken hints and praise. It's **off by
+default**; to enable it, add your key to `local.properties` (git-ignored):
+
+```properties
+GEMINI_API_KEY=your_key_here
+```
+
+Leave it blank and the phonics games still work fully offline (just without the AI Buddy).
+
 ## Privacy
 
-- The three offline activities request **no network access** and collect **no data**.
-- `INTERNET` / `ACCESS_NETWORK_STATE` permissions exist **only** for Brain Arcade's
-  online card games.
+- Story Builder and Code Puzzles request **no network** and collect **no data**.
+- Phonics Quest is offline too; its optional **Gemini "Buddy"** only sends a short text
+  prompt to Google's API when a key is configured **and** the child taps "Ask Buddy".
+- `INTERNET` / `ACCESS_NETWORK_STATE` permissions are used by Brain Arcade's online card
+  games and the optional Phonics AI.
 - The only persisted data is local: star progress, solo best times, and (when signed in)
   a session cookie for Brain Arcade.
 
