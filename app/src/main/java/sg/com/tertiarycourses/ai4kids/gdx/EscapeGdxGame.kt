@@ -12,6 +12,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.viewport.FitViewport
+import sg.com.tertiarycourses.ai4kids.escape.CoopSession
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -33,7 +34,13 @@ import kotlin.math.min
  *
  * [onFinish] is called with the stars earned (0 if the player just backs out).
  */
-class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() {
+class EscapeGdxGame(
+    /** Which escape-room map to play (index into [levels]). */
+    private val levelIndex: Int = 0,
+    /** When non-null, the game runs as a co-op session (shared solved set). */
+    private val coop: CoopSession? = null,
+    private val onFinish: (Int) -> Unit,
+) : ApplicationAdapter() {
 
     private companion object {
         const val W = 480f
@@ -347,6 +354,9 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
         private var startCell = -1
         private var dragCell = -1
 
+        /** The grid only powers on once every machine has lit up its word. */
+        private val readable get() = words.all { isWordRevealed(it) }
+
         override fun onOpen() { startCell = -1; dragCell = -1 }
 
         private fun cellAt(p: Vector2): Int {
@@ -373,7 +383,7 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
                 val cells = (0..steps).map { (r0 + sr * it) * n + (c0 + sc * it) }
                 val word = cells.joinToString("") { grid[it / n][it % n].toString() }
                 val match = words.firstOrNull { it == word || it == word.reversed() }
-                if (match != null && match !in found && isWordRevealed(match)) {
+                if (match != null && match !in found && readable) {
                     found.add(match); foundCells.addAll(cells)
                 }
             }
@@ -383,11 +393,13 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
         override val complete: Boolean get() = found.size == words.size
 
         override fun draw() {
+            val on = readable
             shapes.begin(ShapeRenderer.ShapeType.Filled)
             drawDimAndPanel()
             for (row in 0 until n) for (col in 0 until n) {
                 val idx = row * n + col
                 shapes.color = when {
+                    !on -> Color(0.40f, 0.40f, 0.46f, 1f)   // powered down — static
                     complete && row == crossRow && col == crossCol -> Color(1f, 0.82f, 0.25f, 1f)
                     idx in foundCells -> cGood
                     idx == startCell || idx == dragCell -> Color(1f, 0.85f, 0.3f, 1f)
@@ -404,8 +416,10 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
             for (r in 0 until n) centerText((r + 1).toString(), x0 - 16f, cy(r) + 6f, 0.7f)
             for (row in 0 until n) for (col in 0 until n) {
                 val idx = row * n + col
-                font.color = if (idx in foundCells || (complete && row == crossRow && col == crossCol)) Color.WHITE else cInk
-                centerText(grid[row][col].toString(), cx(col), cy(row) + 6f, 0.85f)
+                // Letters are scrambled-out static until the display powers on.
+                font.color = if (!on) Color(0.30f, 0.30f, 0.34f, 1f)
+                    else if (idx in foundCells || (complete && row == crossRow && col == crossCol)) Color.WHITE else cInk
+                centerText(if (on) grid[row][col].toString() else "?", cx(col), cy(row) + 6f, 0.85f)
             }
             // Words to find: masked until their machine lights them up.
             font.color = cInk
@@ -413,12 +427,39 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
                 when { it in found -> "[$it]"; isWordRevealed(it) -> it; else -> "?".repeat(it.length) }
             }
             centerText(list, W / 2f, 196f, 0.8f)
-            if (complete) {
-                font.color = cGood
-                centerText("They cross at Column ${crossCol + 1}, Row ${crossRow + 1}!", W / 2f, 166f, 0.78f)
-            } else {
-                centerText(instruction, W / 2f, 166f, 0.7f)
+            when {
+                !on -> { font.color = Color(0.96f, 0.6f, 0.3f, 1f); centerText("Power up the display — solve every machine first!", W / 2f, 166f, 0.72f) }
+                complete -> { font.color = cGood; centerText("They cross at Column ${crossCol + 1}, Row ${crossRow + 1}!", W / 2f, 166f, 0.78f) }
+                else -> centerText(instruction, W / 2f, 166f, 0.7f)
             }
+            drawBackLabel()
+            batch.end()
+        }
+    }
+
+    /* --- Note: a clue drop (never "solved", just closed) ---------------- */
+
+    private inner class Note : Puzzle() {
+        override val instruction = ""
+        override fun onDown(p: Vector2) {}
+        override val complete get() = false
+
+        override fun draw() {
+            shapes.begin(ShapeRenderer.ShapeType.Filled)
+            // Dim the scene, then the clue card. The parchment is a placeholder —
+            // swap this rect for a drawn Texture (the asset) at the same bounds.
+            shapes.color = Color(0f, 0f, 0f, 0.6f)
+            shapes.rect(0f, 0f, W, H)
+            shapes.color = Color(0.96f, 0.91f, 0.66f, 1f)
+            shapes.rect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H)
+            shapes.color = Color(0.78f, 0.68f, 0.38f, 1f)
+            shapes.rect(PANEL_X, PANEL_Y + PANEL_H - 12f, PANEL_W, 12f)
+            // Close (X) button.
+            shapes.color = Color(0.92f, 0.40f, 0.40f, 1f)
+            shapes.circle(backCenter.x, backCenter.y, backR)
+            shapes.end()
+
+            batch.begin()
             drawBackLabel()
             batch.end()
         }
@@ -429,55 +470,123 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
     // A room's *content*, independent of where it sits on screen. The grid layout
     // (cell rects, machine positions, walls) is computed per orientation so the
     // same six rooms reflow between a 2x3 (portrait) and 3x2 (landscape) grid.
-    private inner class RoomDef(
+    /** A room placed on the level grid. [gx]/[gy] is its bottom-left grid unit;
+     *  [gw]x[gh] its span (>1 = a conjoined room). Units no room covers are voids
+     *  (solid), which lets maps be L-shaped / irregular. */
+    private inner class GridRoom(
         val id: String, val title: String, val label: String?,
-        val floor: Color, val nodeColor: Color, val puzzle: Puzzle?,
-        val requires: String? = null, val clue: String? = null,
+        val floor: Color, val nodeColor: Color = Color.WHITE,
+        val gx: Int, val gy: Int, val gw: Int = 1, val gh: Int = 1,
+        val puzzle: Puzzle? = null, val requires: String? = null, val clue: String? = null,
     )
     private data class RoomCell(val title: String, val x: Float, val y: Float, val w: Float, val h: Float, val floor: Color)
 
-    // Order matters: rooms fill the grid row-major from the bottom-left, so the
-    // Entrance (spawn) is always the first cell and the Exit Chamber the last.
-    private val roomDefs = listOf(
-        RoomDef("entrance", "Entrance", null, Color(0.30f, 0.34f, 0.46f, 1f), Color.WHITE, null),
-        RoomDef("panel", "Control Panel", "Control Panel", Color(0.26f, 0.36f, 0.50f, 1f), Color(0.20f, 0.62f, 0.98f, 1f),
-            NumberLock("6", "Control Panel", "Count the robots", icons = ROBOT_FIELD),
-            clue = "Display: ROBOT"),
-        RoomDef("decoder", "Symbol Decoder", "Symbol Decoder", Color(0.34f, 0.30f, 0.48f, 1f), Color(0.66f, 0.48f, 0.92f, 1f),
-            Cipher(
-                legendLetters = listOf('G', 'E', 'A', 'R', 'S', 'T', 'N', 'O'),
-                coded = listOf(0, 1, 2, 3), // glyph kinds -> G,E,A,R
-                answer = "GEAR",
-            ),
-            clue = "Display: GEAR"),
-        RoomDef("robot", "Robot Helper", "Robot Helper", Color(0.40f, 0.34f, 0.30f, 1f), Color(1f, 0.58f, 0.20f, 1f),
-            Order(listOf(
-                "Show the robot lots of cat photos",
-                "The robot spots the pattern",
-                "The robot guesses 'cat!' on a new photo",
-            )),
-            clue = "Display: LEARN"),
-        RoomDef("poster", "Word Display", "Word Display", Color(0.28f, 0.42f, 0.36f, 1f), cGood,
-            WordSearch(
-                words = listOf("ROBOT", "LEARN", "GEAR"),
-                grid = arrayOf(
-                    "ZXQKVWYJ".toCharArray(),
-                    "GPDLHUFM".toCharArray(),
-                    "CEVEKXQZ".toCharArray(),
-                    "WYAAJPDH".toCharArray(),
-                    "KVQROBOT".toCharArray(),
-                    "XZJNCWYF".toCharArray(),
-                    "MPUDKVQX".toCharArray(),
-                    "HFCZJWYP".toCharArray(),
-                ),
-                crossRow = 4, crossCol = 3, // ROBOT->, LEARN(down), GEAR(diag) cross at the R
-            ),
-            clue = "Door code: 45"),
-        RoomDef("keypad", "Exit Chamber", "Exit Keypad", Color(0.30f, 0.40f, 0.42f, 1f), cGood,
-            NumberLock("45", "Exit Keypad", "Enter the door code", showClues = true),
-            requires = "poster"),
+    /** One escape-room map. [doors] are the connected room-id pairs — only those
+     *  get an opening, so neighbours aren't all reachable. */
+    private inner class EscapeLevel(
+        val name: String, val gridCols: Int, val gridRows: Int,
+        val rooms: List<GridRoom>, val doors: Set<Pair<String, String>>,
+        val spawnRoom: String, val exitRoom: String, val clueRoom: String? = null,
     )
-    private val totalStations = roomDefs.count { it.puzzle != null }
+
+    // A clue drop (parchment placeholder for now) that will explain the trick.
+    private val clueNote = Note()
+
+    private fun floorColor(i: Int) = listOf(
+        Color(0.30f, 0.34f, 0.46f, 1f), Color(0.34f, 0.30f, 0.48f, 1f), Color(0.28f, 0.42f, 0.36f, 1f),
+        Color(0.40f, 0.34f, 0.30f, 1f), Color(0.26f, 0.36f, 0.50f, 1f), Color(0.30f, 0.40f, 0.42f, 1f),
+    )[((i % 6) + 6) % 6]
+
+    // ---- Level 0: the fully-built Robot Lab (a connected 2x3 grid) ----
+    private val robotLab = EscapeLevel(
+        name = "Robot Lab", gridCols = 2, gridRows = 3,
+        rooms = listOf(
+            GridRoom("entrance", "Entrance", null, floorColor(0), gx = 0, gy = 0),
+            GridRoom("panel", "Control Panel", "Control Panel", floorColor(4), Color(0.20f, 0.62f, 0.98f, 1f), gx = 1, gy = 0,
+                puzzle = NumberLock("6", "Control Panel", "Count the robots", icons = ROBOT_FIELD), clue = "Display: ROBOT"),
+            GridRoom("decoder", "Symbol Decoder", "Symbol Decoder", floorColor(1), Color(0.66f, 0.48f, 0.92f, 1f), gx = 0, gy = 1,
+                puzzle = Cipher(listOf('G', 'E', 'A', 'R', 'S', 'T', 'N', 'O'), listOf(0, 1, 2, 3), "GEAR"), clue = "Display: GEAR"),
+            GridRoom("robot", "Robot Helper", "Robot Helper", floorColor(3), Color(1f, 0.58f, 0.20f, 1f), gx = 1, gy = 1,
+                puzzle = Order(listOf("Show the robot lots of cat photos", "The robot spots the pattern", "The robot guesses 'cat!' on a new photo")), clue = "Display: LEARN"),
+            GridRoom("poster", "Word Display", "Word Display", floorColor(2), cGood, gx = 0, gy = 2,
+                puzzle = WordSearch(
+                    listOf("ROBOT", "LEARN", "GEAR"),
+                    arrayOf("ZXQKVWYJ".toCharArray(), "GPDLHUFM".toCharArray(), "CEVEKXQZ".toCharArray(), "WYAAJPDH".toCharArray(),
+                        "KVQROBOT".toCharArray(), "XZJNCWYF".toCharArray(), "MPUDKVQX".toCharArray(), "HFCZJWYP".toCharArray()),
+                    4, 3,
+                )),
+            GridRoom("keypad", "Exit Chamber", "Exit Keypad", floorColor(5), cGood, gx = 1, gy = 2,
+                puzzle = NumberLock("45", "Exit Keypad", "Enter the door code", showClues = false), requires = "poster"),
+        ),
+        doors = setOf(
+            "entrance" to "panel", "entrance" to "decoder", "panel" to "robot",
+            "decoder" to "robot", "decoder" to "poster", "robot" to "keypad", "poster" to "keypad",
+        ),
+        spawnRoom = "entrance", exitRoom = "keypad", clueRoom = "entrance",
+    )
+
+    // ---- Levels 1-4: empty layouts (no puzzles yet) with varied shapes ----
+    private val vault = EscapeLevel(
+        name = "The Vault", gridCols = 3, gridRows = 3,
+        rooms = listOf(
+            GridRoom("hall", "Hall", null, floorColor(0), gx = 0, gy = 0, gw = 3, gh = 1),  // wide
+            GridRoom("west", "West Wing", null, floorColor(1), gx = 0, gy = 1, gh = 2),       // tall 1x2
+            GridRoom("core", "Core", null, floorColor(2), gx = 1, gy = 1),
+            GridRoom("east", "East Wing", null, floorColor(3), gx = 2, gy = 1, gh = 2),       // tall 1x2
+            GridRoom("top", "Top Vault", null, floorColor(4), gx = 1, gy = 2),
+        ),
+        doors = setOf("hall" to "west", "hall" to "east", "west" to "core", "core" to "top"),
+        spawnRoom = "hall", exitRoom = "east",
+    )
+    private val tower = EscapeLevel(
+        name = "The Tower", gridCols = 2, gridRows = 4,
+        rooms = listOf(
+            GridRoom("foyer", "Foyer", null, floorColor(0), gx = 0, gy = 0, gw = 2),          // wide
+            GridRoom("stairL", "Lower Stair", null, floorColor(1), gx = 0, gy = 1),
+            GridRoom("pump", "Pump Room", null, floorColor(2), gx = 1, gy = 1),
+            GridRoom("landing", "Landing", null, floorColor(3), gx = 0, gy = 2, gw = 2),       // wide
+            GridRoom("attic", "Attic", null, floorColor(4), gx = 0, gy = 3),
+            GridRoom("store", "Store", null, floorColor(5), gx = 1, gy = 3),
+        ),
+        doors = setOf("foyer" to "pump", "pump" to "stairL", "stairL" to "landing", "landing" to "store", "store" to "attic"),
+        spawnRoom = "foyer", exitRoom = "attic",
+    )
+    private val annex = EscapeLevel(
+        name = "The Annex", gridCols = 3, gridRows = 3,                                        // L-shaped (2 voids)
+        rooms = listOf(
+            GridRoom("lobby", "Lobby", null, floorColor(0), gx = 0, gy = 0),
+            GridRoom("gallery", "Gallery", null, floorColor(1), gx = 1, gy = 0, gw = 2),        // wide
+            GridRoom("stairwell", "Stairwell", null, floorColor(2), gx = 0, gy = 1, gh = 2),    // tall 1x2
+            GridRoom("study", "Study", null, floorColor(3), gx = 1, gy = 1),
+            GridRoom("loft", "Loft", null, floorColor(4), gx = 1, gy = 2),
+            // grid units (2,1) and (2,2) are left void -> the map is an L.
+        ),
+        doors = setOf("lobby" to "gallery", "lobby" to "stairwell", "stairwell" to "study", "study" to "loft"),
+        spawnRoom = "lobby", exitRoom = "loft",
+    )
+    private val bigHall = EscapeLevel(
+        name = "The Big Hall", gridCols = 4, gridRows = 2,
+        rooms = listOf(
+            GridRoom("gateA", "West Gate", null, floorColor(0), gx = 0, gy = 0),
+            GridRoom("gateB", "West Loft", null, floorColor(1), gx = 0, gy = 1),
+            GridRoom("hall", "Grand Hall", null, floorColor(2), gx = 1, gy = 0, gw = 2, gh = 2), // 2x2 conjoined
+            GridRoom("eastA", "East Gate", null, floorColor(3), gx = 3, gy = 0),
+            GridRoom("eastB", "East Loft", null, floorColor(4), gx = 3, gy = 1),
+        ),
+        doors = setOf("gateA" to "hall", "gateA" to "gateB", "hall" to "eastB", "eastB" to "eastA"),
+        spawnRoom = "gateA", exitRoom = "eastA",
+    )
+
+    private val levels = listOf(robotLab, vault, tower, annex, bigHall)
+    private val currentLevel get() = levels[levelIndex.coerceIn(0, levels.size - 1)]
+    private val rooms get() = currentLevel.rooms
+    private val totalStations get() = rooms.count { it.puzzle != null }
+
+    private val cluePos = Vector2()
+    private val spawnPos = Vector2()
+    private var exitRoomIndex = 0
+    private var spawnRoomIndex = 0
+    private var clueRoomIndex = -1
 
     private val wallColor = Color(0.12f, 0.13f, 0.22f, 1f)
 
@@ -494,11 +603,11 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
     private val solvedPos = Vector2()
     private val cluesAnchor = Vector2()
 
-    /** Recompute the room grid, walls and HUD anchors for the current orientation. */
-    private fun buildLayout() {
-        val cols: Int; val rows: Int
+    /** Lay out [currentLevel] for the current orientation. The level's grid fits
+     *  the play area, so each map fills the screen in both portrait and landscape. */
+    private fun loadLevel() {
+        val level = currentLevel
         if (landscape) {
-            cols = 3; rows = 2
             worldW = 800f; worldH = 480f
             areaX = 22f; areaY = 32f; areaW = worldW - 44f; areaH = worldH - 92f
             titlePos.set(worldW / 2f, worldH - 18f)
@@ -507,7 +616,6 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
             closeCenter.set(48f, worldH - 40f)
             cluesAnchor.set(worldW - 88f, worldH - 24f)
         } else {
-            cols = 2; rows = 3
             worldW = 480f; worldH = 800f
             areaX = 22f; areaY = 56f; areaW = worldW - 44f; areaH = 638f
             titlePos.set(worldW / 2f, 768f)
@@ -516,47 +624,82 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
             closeCenter.set(42f, 752f)
             cluesAnchor.set(worldW / 2f, 62f)
         }
-        val cw = areaW / cols; val ch = areaH / rows
-        cells = roomDefs.indices.map { i ->
-            val c = i % cols; val r = i / cols
-            RoomCell(roomDefs[i].title, areaX + c * cw, areaY + r * ch, cw, ch, roomDefs[i].floor)
+        val cw = areaW / level.gridCols; val ch = areaH / level.gridRows
+        cells = level.rooms.map { r ->
+            RoomCell(r.title, areaX + r.gx * cw, areaY + r.gy * ch, r.gw * cw, r.gh * ch, r.floor)
         }
         stationPos = cells.map { Vector2(it.x + it.w / 2f, it.y + it.h / 2f + 8f) }
-        val last = cells.last()
-        exitDoor.set(last.x + last.w * 0.8f, last.y + last.h / 2f)
-        walls = buildWalls(cols, rows, cw, ch)
+        spawnRoomIndex = level.rooms.indexOfFirst { it.id == level.spawnRoom }.coerceAtLeast(0)
+        exitRoomIndex = level.rooms.indexOfFirst { it.id == level.exitRoom }.coerceAtLeast(0)
+        clueRoomIndex = level.clueRoom?.let { id -> level.rooms.indexOfFirst { it.id == id } } ?: -1
+        val sp = cells[spawnRoomIndex]; spawnPos.set(sp.x + sp.w / 2f, sp.y + sp.h / 2f)
+        val ex = cells[exitRoomIndex]; exitDoor.set(ex.x + ex.w * 0.78f, ex.y + ex.h * 0.5f)
+        if (clueRoomIndex >= 0) { val cc = cells[clueRoomIndex]; cluePos.set(cc.x + cc.w / 2f, cc.y + cc.h * 0.72f) }
+        walls = buildLevelWalls(level, cw, ch)
     }
 
-    /** Outer border + interior dividers, each with a doorway gap so rooms connect. */
-    private fun buildWalls(cols: Int, rows: Int, cw: Float, ch: Float): List<FloatArray> {
-        val w = ArrayList<FloatArray>()
-        val t = 8f; val gap = 72f
-        // Outer border.
-        w.add(floatArrayOf(areaX - t, areaY - t, t, areaH + 2 * t))
-        w.add(floatArrayOf(areaX + areaW, areaY - t, t, areaH + 2 * t))
-        w.add(floatArrayOf(areaX - t, areaY - t, areaW + 2 * t, t))
-        w.add(floatArrayOf(areaX - t, areaY + areaH, areaW + 2 * t, t))
-        // Vertical dividers between columns (doorway per row).
-        for (c in 1 until cols) {
-            val x = areaX + c * cw
-            for (r in 0 until rows) {
-                val y0 = areaY + r * ch; val gc = y0 + ch / 2f
-                val below = gc - gap / 2f - y0; val above = (y0 + ch) - (gc + gap / 2f)
-                if (below > 0) w.add(floatArrayOf(x - t / 2f, y0, t, below))
-                if (above > 0) w.add(floatArrayOf(x - t / 2f, gc + gap / 2f, t, above))
+    /** Walls from the level's rooms: solid along every room boundary and the outer
+     *  border (and around voids), with a single doorway gap per connected pair. */
+    private fun buildLevelWalls(level: EscapeLevel, cw: Float, ch: Float): List<FloatArray> {
+        val cols = level.gridCols; val rows = level.gridRows
+        val unit = Array(cols) { IntArray(rows) { -1 } }
+        level.rooms.forEachIndexed { i, r ->
+            for (gx in r.gx until r.gx + r.gw) for (gy in r.gy until r.gy + r.gh)
+                if (gx in 0 until cols && gy in 0 until rows) unit[gx][gy] = i
+        }
+        fun connected(a: Int, b: Int): Boolean {
+            if (a < 0 || b < 0) return false
+            val ida = level.rooms[a].id; val idb = level.rooms[b].id
+            return (ida to idb) in level.doors || (idb to ida) in level.doors
+        }
+        val t = 8f
+        val out = ArrayList<FloatArray>()
+        val pairEdges = HashMap<Long, ArrayList<FloatArray>>() // [x, y, len, vertical]
+        fun key(a: Int, b: Int) = minOf(a, b).toLong() * 100000L + maxOf(a, b)
+
+        // Vertical edges (between columns).
+        for (col in 0..cols) for (row in 0 until rows) {
+            val a = if (col - 1 in 0 until cols) unit[col - 1][row] else -1
+            val b = if (col in 0 until cols) unit[col][row] else -1
+            if (a == b) continue
+            val x = areaX + col * cw; val y0 = areaY + row * ch
+            if (a >= 0 && b >= 0 && connected(a, b)) {
+                pairEdges.getOrPut(key(a, b)) { ArrayList() }.add(floatArrayOf(x, y0, ch, 1f))
+            } else {
+                out.add(floatArrayOf(x - t / 2f, y0, t, ch))
             }
         }
-        // Horizontal dividers between rows (doorway per column).
-        for (r in 1 until rows) {
-            val y = areaY + r * ch
-            for (c in 0 until cols) {
-                val x0 = areaX + c * cw; val gc = x0 + cw / 2f
-                val left = gc - gap / 2f - x0; val right = (x0 + cw) - (gc + gap / 2f)
-                if (left > 0) w.add(floatArrayOf(x0, y - t / 2f, left, t))
-                if (right > 0) w.add(floatArrayOf(gc + gap / 2f, y - t / 2f, right, t))
+        // Horizontal edges (between rows).
+        for (row in 0..rows) for (col in 0 until cols) {
+            val a = if (row - 1 in 0 until rows) unit[col][row - 1] else -1
+            val b = if (row in 0 until rows) unit[col][row] else -1
+            if (a == b) continue
+            val y = areaY + row * ch; val x0 = areaX + col * cw
+            if (a >= 0 && b >= 0 && connected(a, b)) {
+                pairEdges.getOrPut(key(a, b)) { ArrayList() }.add(floatArrayOf(x0, y, cw, 0f))
+            } else {
+                out.add(floatArrayOf(x0, y - t / 2f, cw, t))
             }
         }
-        return w
+        // Open the middle shared edge of each connected pair; wall the rest.
+        for (edges in pairEdges.values) {
+            edges.sortBy { it[0] + it[1] }
+            val doorIdx = edges.size / 2
+            edges.forEachIndexed { idx, e ->
+                val x = e[0]; val y = e[1]; val len = e[2]; val vertical = e[3] > 0.5f
+                if (idx == doorIdx) {
+                    val seg = (len - minOf(len * 0.7f, 90f)) / 2f
+                    if (seg > 0f) {
+                        if (vertical) { out.add(floatArrayOf(x - t / 2f, y, t, seg)); out.add(floatArrayOf(x - t / 2f, y + len - seg, t, seg)) }
+                        else { out.add(floatArrayOf(x, y - t / 2f, seg, t)); out.add(floatArrayOf(x + len - seg, y - t / 2f, seg, t)) }
+                    }
+                } else {
+                    if (vertical) out.add(floatArrayOf(x - t / 2f, y, t, len))
+                    else out.add(floatArrayOf(x, y - t / 2f, len, t))
+                }
+            }
+        }
+        return out
     }
 
     private fun currentRoomIndex(): Int {
@@ -567,14 +710,17 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
     /** Index of an interactable (unsolved) machine in the room the player is in. */
     private fun activeMachine(): Int? {
         val i = currentRoomIndex()
-        val rd = roomDefs[i]
+        val rd = rooms[i]
         if (rd.puzzle == null || rd.id in solved) return null
         val p = stationPos[i]
         return if (dst(pos.x, pos.y, p.x, p.y) < 80f) i else null
     }
 
     private fun nearExit() =
-        currentRoomIndex() == roomDefs.lastIndex && dst(pos.x, pos.y, exitDoor.x, exitDoor.y) < 64f
+        currentRoomIndex() == exitRoomIndex && dst(pos.x, pos.y, exitDoor.x, exitDoor.y) < 64f
+
+    private fun nearClue() =
+        clueRoomIndex >= 0 && currentRoomIndex() == clueRoomIndex && dst(pos.x, pos.y, cluePos.x, cluePos.y) < 72f
 
     private enum class Phase { PLAYING, PUZZLE, WON }
 
@@ -603,6 +749,7 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
     private var wrongFlash = 0f
     private var flashMsg = ""
     private var prevTouched = false
+    private var puzzleHadMistake = false
     private val touch = Vector2()
 
     override fun create() {
@@ -612,10 +759,10 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
         batch = SpriteBatch()
         font = BitmapFont()
         font.setUseIntegerPositions(false)
-        buildLayout()
+        loadLevel()
         worldViewport = FitViewport(worldW, worldH, worldCam)
         puzzleViewport = FitViewport(W, H, puzzleCam)
-        pos.set(cells[0].x + cells[0].w / 2f, cells[0].y + cells[0].h / 2f)
+        pos.set(spawnPos)
         Gdx.input.setCatchKey(com.badlogic.gdx.Input.Keys.BACK, false)
     }
 
@@ -654,9 +801,9 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
     private fun inRect(p: Vector2, r: FloatArray) = p.x >= r[0] && p.x <= r[0] + r[2] && p.y >= r[1] && p.y <= r[1] + r[3]
     private fun sgn(x: Int) = if (x > 0) 1 else if (x < 0) -1 else 0
 
-    private fun isLocked(i: Int) = roomDefs[i].requires?.let { it !in solved } ?: false
-    private fun labelOf(id: String) = roomDefs.firstOrNull { it.id == id }?.title ?: id
-    private fun collectedClues() = roomDefs
+    private fun isLocked(i: Int) = rooms[i].requires?.let { it !in solved } ?: false
+    private fun labelOf(id: String) = rooms.firstOrNull { it.id == id }?.title ?: id
+    private fun collectedClues() = rooms
         .filter { it.id in solved && it.clue != null }
         .map { it.clue!! }
 
@@ -727,7 +874,15 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
                     pz?.onDrag(unprojectTouch())
                 }
                 if (justUp) pz?.onUp(unprojectTouch())
-                if (pz != null && pz.complete) { activeStationId?.let { solved.add(it) }; closePuzzle() }
+                if (wrongFlash > 0f) puzzleHadMistake = true
+                if (pz != null && pz.complete) {
+                    activeStationId?.let { id ->
+                        solved.add(id)
+                        // The Exit Keypad is a local gate, not a server station.
+                        if (id != "keypad") coop?.reportSolve(id, firstTry = !puzzleHadMistake)
+                    }
+                    closePuzzle()
+                }
             }
             Phase.WON -> if (justDown) onFinish(starsForWin())
         }
@@ -739,9 +894,13 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
     private fun doAction() {
         val mi = activeMachine()
         if (mi != null) {
-            val rd = roomDefs[mi]
+            val rd = rooms[mi]
             if (isLocked(mi)) { flashMsg = "Locked — solve \"${labelOf(rd.requires!!)}\" first"; wrongFlash = 1.4f; return }
-            activePuzzle = rd.puzzle; activeStationId = rd.id; rd.puzzle!!.onOpen(); wrongFlash = 0f; phase = Phase.PUZZLE; return
+            activePuzzle = rd.puzzle; activeStationId = rd.id; rd.puzzle!!.onOpen()
+            wrongFlash = 0f; puzzleHadMistake = false; phase = Phase.PUZZLE; return
+        }
+        if (nearClue()) {
+            activePuzzle = clueNote; activeStationId = null; phase = Phase.PUZZLE; return
         }
         if (nearExit()) {
             if (solved.size >= totalStations) phase = Phase.WON
@@ -753,12 +912,18 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
         activePuzzle = null; activeStationId = null; phase = Phase.PLAYING; joyActive = false; wrongFlash = 0f
     }
 
-    private fun starsForWin() = 5
+    private fun starsForWin() = if (totalStations == 0) 0 else 5
 
     /* ----------------------------- render ----------------------------- */
 
     override fun render() {
         val dt = min(Gdx.graphics.deltaTime, 1f / 30f)
+        // Co-op: fold the team's shared solved set in, and report which room we're
+        // in for presence. Teammates' solves unlock the same gates for everyone.
+        coop?.let { c ->
+            c.state?.let { solved.addAll(it.solved) }
+            c.atStation = rooms[currentRoomIndex()].id
+        }
         handleInput(dt)
 
         Gdx.gl.glClearColor(0.06f, 0.06f, 0.10f, 1f)
@@ -784,11 +949,28 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
         batch.projectionMatrix = puzzleCam.combined
     }
 
+    // Distinct token colours for co-op teammates (keyed by learner id).
+    private val mateColors = arrayOf(
+        Color(0.36f, 0.78f, 0.98f, 1f), Color(0.96f, 0.55f, 0.80f, 1f),
+        Color(0.55f, 0.85f, 0.45f, 1f), Color(0.98f, 0.62f, 0.30f, 1f),
+        Color(0.70f, 0.60f, 0.95f, 1f),
+    )
+    private fun playerColor(id: Int) = mateColors[((id % mateColors.size) + mateColors.size) % mateColors.size]
+    // Teammates are laid out in a row near the top of the room (we only know which
+    // room they're in, not their exact position).
+    private fun mateX(i: Int, n: Int, c: RoomCell) = c.x + c.w / 2f + (i - (n - 1) / 2f) * 46f
+    private fun mateY(c: RoomCell) = c.y + c.h - 44f
+
     private fun drawScene() {
         val curIdx = currentRoomIndex()
         val mi = activeMachine()
         val nearEx = nearExit()
+        val nearC = nearClue()
         val exitOpen = solved.size >= totalStations
+        // Co-op teammates standing in this room (avatar tokens, drawn below).
+        val mates = coop?.state?.let { st ->
+            st.players.filter { it.learnerId != st.you && it.atStation == rooms[curIdx].id }
+        } ?: emptyList()
 
         shapes.begin(ShapeRenderer.ShapeType.Filled)
         // Backdrop + every room's floor + the walls.
@@ -799,18 +981,18 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
         walls.forEach { shapes.rect(it[0], it[1], it[2], it[3]) }
 
         // Exit door (sits in the Exit Chamber — the last room).
-        if (curIdx == roomDefs.lastIndex) {
+        if (curIdx == exitRoomIndex) {
             shapes.color = if (exitOpen) Color(0.42f, 0.29f, 0.17f, 1f) else Color(0.4f, 0.2f, 0.2f, 1f)
             shapes.rect(exitDoor.x - 18f, exitDoor.y - 28f, 36f, 56f)
             if (nearEx) { shapes.color = Color.WHITE; shapes.rect(exitDoor.x - 22f, exitDoor.y + 28f, 44f, 4f) }
         }
 
         // Only the current room's machine is drawn (others are hidden anyway).
-        roomDefs[curIdx].puzzle?.let {
+        rooms[curIdx].puzzle?.let {
             val p = stationPos[curIdx]
-            val done = roomDefs[curIdx].id in solved
+            val done = rooms[curIdx].id in solved
             val locked = isLocked(curIdx)
-            shapes.color = when { done -> cGood; locked -> Color(0.5f, 0.5f, 0.56f, 1f); else -> roomDefs[curIdx].nodeColor }
+            shapes.color = when { done -> cGood; locked -> Color(0.5f, 0.5f, 0.56f, 1f); else -> rooms[curIdx].nodeColor }
             shapes.circle(p.x, p.y, 30f)
             shapes.color = Color.WHITE
             shapes.circle(p.x, p.y, 14f)
@@ -818,9 +1000,28 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
             if (mi == curIdx) { shapes.color = Color.WHITE; shapes.circle(p.x, p.y + 46f, 5f) }
         }
 
+        // Clue drop (dummy art placeholder) — a parchment note in the clue room.
+        if (clueRoomIndex >= 0 && curIdx == clueRoomIndex) {
+            shapes.color = Color(0.96f, 0.91f, 0.66f, 1f)
+            shapes.rect(cluePos.x - 15f, cluePos.y - 18f, 30f, 36f)
+            shapes.color = Color(0.78f, 0.68f, 0.38f, 1f)
+            shapes.rect(cluePos.x - 15f, cluePos.y + 12f, 30f, 6f)
+            if (nearC) { shapes.color = Color.WHITE; shapes.circle(cluePos.x, cluePos.y + 34f, 5f) }
+        }
+
         // Fog of war — cover every room the player isn't standing in.
         shapes.color = Color(0.05f, 0.05f, 0.10f, 0.95f)
         cells.forEachIndexed { idx, c -> if (idx != curIdx) shapes.rect(c.x, c.y, c.w, c.h) }
+
+        // Co-op teammate avatars (a coloured character token per player here).
+        mates.forEachIndexed { i, m ->
+            val mx = mateX(i, mates.size, cells[curIdx]); val my = mateY(cells[curIdx])
+            shapes.color = playerColor(m.learnerId)
+            shapes.circle(mx, my, 16f)
+            shapes.color = cInk
+            shapes.circle(mx - 5f, my + 3f, 3f)
+            shapes.circle(mx + 5f, my + 3f, 3f)
+        }
 
         // Player (drawn over the fog so it's never clipped at doorways).
         shapes.color = Color(0.98f, 0.80f, 0.16f, 1f)
@@ -836,7 +1037,7 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
             shapes.circle(joyKnob.x, joyKnob.y, 30f)
         }
 
-        val canAct = mi != null || nearEx
+        val canAct = mi != null || nearEx || nearC
         shapes.color = if (canAct) cAccent else Color(1f, 1f, 1f, 0.25f)
         shapes.circle(actionCenter.x, actionCenter.y, actionR)
 
@@ -846,18 +1047,25 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
 
         batch.begin()
         font.color = Color.WHITE
-        roomDefs[curIdx].label?.let { centerText(it, stationPos[curIdx].x, stationPos[curIdx].y - 40f, 0.9f) }
-        if (curIdx == roomDefs.lastIndex) centerText(if (exitOpen) "EXIT" else "LOCKED", exitDoor.x, exitDoor.y - 40f, 0.75f)
+        rooms[curIdx].label?.let { centerText(it, stationPos[curIdx].x, stationPos[curIdx].y - 40f, 0.9f) }
+        if (clueRoomIndex >= 0 && curIdx == clueRoomIndex) centerText("Lab Note", cluePos.x, cluePos.y - 30f, 0.75f)
+        if (curIdx == exitRoomIndex) centerText(if (exitOpen) "EXIT" else "LOCKED", exitDoor.x, exitDoor.y - 40f, 0.75f)
         font.color = Color.WHITE
         val actLabel = when {
             mi != null && isLocked(mi) -> "LOCK"
             mi != null -> "USE"
+            nearC -> "READ"
             nearEx -> if (exitOpen) "EXIT" else "LOCK"
             else -> ""
         }
         centerText(actLabel, actionCenter.x, actionCenter.y + 6f, 0.85f)
         font.color = cInk
         centerText("X", closeCenter.x, closeCenter.y + 6f, 1.1f)
+        // Co-op teammate name under each avatar token.
+        font.color = Color(0.88f, 0.93f, 1f, 1f)
+        mates.forEachIndexed { i, m ->
+            centerText(m.name.substringBefore(' '), mateX(i, mates.size, cells[curIdx]), mateY(cells[curIdx]) - 24f, 0.6f)
+        }
         batch.end()
 
         if (wrongFlash > 0f) {
@@ -900,7 +1108,18 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
         batch.begin()
         font.color = Color.WHITE
         centerText(cells[currentRoomIndex()].title, titlePos.x, titlePos.y, 1.2f)
-        centerText("${solved.size}/$totalStations solved", solvedPos.x, solvedPos.y, 0.9f)
+        val coopState = coop?.state
+        if (coopState != null) {
+            centerText("Team ${coopState.solved.size}/${coopState.total} solved", solvedPos.x, solvedPos.y, 0.85f)
+            if (coopState.players.size > 1) {
+                val names = coopState.players.joinToString(", ") { it.name.substringBefore(' ') }
+                font.color = Color(0.7f, 0.9f, 1f, 1f)
+                centerText(names, solvedPos.x, solvedPos.y - 20f, 0.6f)
+                font.color = Color.WHITE
+            }
+        } else {
+            centerText("${solved.size}/$totalStations solved", solvedPos.x, solvedPos.y, 0.9f)
+        }
         val clues = collectedClues()
         if (clues.isNotEmpty()) {
             font.color = Color(1f, 0.9f, 0.55f, 1f)
@@ -927,7 +1146,7 @@ class EscapeGdxGame(private val onFinish: (Int) -> Unit) : ApplicationAdapter() 
         // same room (moved to its new centre).
         val keepRoom = currentRoomIndex()
         landscape = width > height
-        buildLayout()
+        loadLevel()
         worldViewport.worldWidth = worldW
         worldViewport.worldHeight = worldH
         worldViewport.update(width, height, true)

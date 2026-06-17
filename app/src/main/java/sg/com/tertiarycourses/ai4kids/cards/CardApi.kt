@@ -52,7 +52,9 @@ object CardApi {
         }
     }
 
-    private val client: OkHttpClient by lazy {
+    // Shared with EscapeApi (co-op escape rooms) so the same NextAuth session
+    // cookie authenticates both features.
+    internal val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .connectTimeout(15, TimeUnit.SECONDS)

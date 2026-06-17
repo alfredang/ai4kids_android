@@ -49,6 +49,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import sg.com.tertiarycourses.ai4kids.cards.BrainArcadeScreen
 import sg.com.tertiarycourses.ai4kids.data.LocalProgressStore
+import sg.com.tertiarycourses.ai4kids.escape.EscapeLobbyScreen
 import sg.com.tertiarycourses.ai4kids.gdx.EscapeActivity
 import sg.com.tertiarycourses.ai4kids.model.Activity
 import sg.com.tertiarycourses.ai4kids.ui.activities.CodePuzzlesScreen
@@ -79,13 +80,18 @@ fun RootScreen(modifier: Modifier = Modifier) {
             if (stars > 0) progress.award(stars, Activity.ESCAPE)
         }
     }
-    fun openActivity(activity: Activity) {
-        if (activity == Activity.ESCAPE) {
-            escapeLauncher.launch(Intent(context, EscapeActivity::class.java))
-        } else {
-            selected = activity
+    // The Escape Room opens a lobby (solo or co-op) which then launches the game.
+    fun launchEscape(code: String?, host: Boolean, level: Int) {
+        val intent = Intent(context, EscapeActivity::class.java)
+        intent.putExtra(EscapeActivity.EXTRA_LEVEL, level)
+        if (code != null) {
+            intent.putExtra(EscapeActivity.EXTRA_CODE, code)
+            intent.putExtra(EscapeActivity.EXTRA_HOST, host)
         }
+        escapeLauncher.launch(intent)
+        selected = null
     }
+    fun openActivity(activity: Activity) { selected = activity }
 
     // An open activity / arcade fully replaces the home grid (rather than drawing
     // on top of it), so touches can't fall through to the cards behind.
@@ -94,7 +100,10 @@ fun RootScreen(modifier: Modifier = Modifier) {
             Activity.PHONICS -> PhonicsScreen(onClose = { selected = null })
             Activity.STORY -> StoryBuilderScreen(onClose = { selected = null })
             Activity.CODE -> CodePuzzlesScreen(onClose = { selected = null })
-            Activity.ESCAPE -> Unit // launched as its own Activity, never shown here
+            Activity.ESCAPE -> EscapeLobbyScreen(
+                onClose = { selected = null },
+                onPlay = { code, host, level -> launchEscape(code, host, level) },
+            )
             null -> Unit
         }
         showArcade -> BrainArcadeScreen(onClose = { showArcade = false })
