@@ -180,7 +180,7 @@ private fun ArcadeCard(onOpen: () -> Unit) {
         Text("Brain Arcade", color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
         Text("Card games with friends", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 17.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.weight(1f))
-        Text("🃏 6 games", color = Theme.Ink.copy(alpha = 0.7f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("🃏 10 games", color = Theme.Ink.copy(alpha = 0.7f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 

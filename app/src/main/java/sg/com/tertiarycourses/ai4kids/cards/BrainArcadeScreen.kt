@@ -38,7 +38,7 @@ import sg.com.tertiarycourses.ai4kids.ui.components.softShadow
 import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
 
 /**
- * The online Brain Arcade. Gates on sign-in, then shows the six card games.
+ * The online Brain Arcade. Gates on sign-in, then shows the card games.
  * Picking one opens [CardGameScreen]. Android port of the web `CardGamesHub`.
  */
 @Composable
@@ -123,7 +123,7 @@ private fun LoginPrompt(onLogin: () -> Unit) {
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
             Text("Log in for more games", color = Theme.Ink, fontSize = 16.sp, fontWeight = FontWeight.Black)
-            Text("Unlock all 6 games and play with friends using a room code.", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text("Unlock every game and play with friends using a room code.", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 13.sp)
         }
         Text("Log in ▶", color = Theme.Purple, fontSize = 15.sp, fontWeight = FontWeight.Black)
     }

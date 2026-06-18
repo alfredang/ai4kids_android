@@ -113,6 +113,10 @@ sealed interface GameView {
             "beatdie" -> BeatDieView.parse(o)
             "showdown" -> ShowdownView.parse(o)
             "matchcolours" -> MatchColoursView.parse(o)
+            "maketen" -> MakeTenView.parse(o)
+            "wheel" -> WheelView.parse(o)
+            "oddone" -> OddOneView.parse(o)
+            "sequence" -> SeqView.parse(o)
             else -> UnknownView
         }
     }
@@ -292,6 +296,196 @@ data class ShowdownView(
                 starsToWin = o.optInt("starsToWin"),
                 turnPlayerId = o.optInt("turnPlayerId"),
                 yourTurn = o.optBoolean("yourTurn"),
+            )
+        }
+    }
+}
+
+/** A single face-up card on the Make Ten board (stable [id] + its [value]). */
+data class MakeTenCardView(val id: Int, val value: Int)
+
+/**
+ * Make Ten — a solo number-bonds game. The board is a set of face-up cards; the
+ * player clears them two at a time by tapping pairs that sum to 10. [cleared] of
+ * [goal] pairs are gone; the board is solvable to empty (every card has a partner).
+ *
+ * Each pair is one [round] with a shrinking [roundMs] time budget — the board
+ * runs the countdown and POSTs a `timeout` move (a loss) if it hits zero.
+ */
+data class MakeTenView(
+    val cards: List<MakeTenCardView>,
+    val cleared: Int,
+    val goal: Int,
+    val round: Int,
+    val roundMs: Long,
+    override val turnPlayerId: Int,
+    override val yourTurn: Boolean,
+    val finished: List<Int>,
+) : GameView {
+    companion object {
+        fun parse(o: JSONObject): MakeTenView {
+            val arr = o.optJSONArray("cards")
+            val cards = if (arr == null) emptyList() else (0 until arr.length()).map { i ->
+                val c = arr.getJSONObject(i)
+                MakeTenCardView(c.getInt("id"), c.getInt("value"))
+            }
+            return MakeTenView(
+                cards = cards,
+                cleared = o.optInt("cleared"),
+                goal = o.optInt("goal"),
+                round = o.optInt("round"),
+                roundMs = o.optLong("roundMs"),
+                turnPlayerId = o.optInt("turnPlayerId"),
+                yourTurn = o.optBoolean("yourTurn"),
+                finished = o.optJSONArray("finished").toIntList(),
+            )
+        }
+    }
+}
+
+/** One hand card in Critter Count: how many of each wheel animal it shows. */
+data class WheelCardView(val id: Int, val counts: List<Pair<String, Int>>)
+
+/**
+ * Animal Count — a solo spot-the-count game. The [wheel] spins to a
+ * [targetAnimal]; a [targetCount] (0–2) is called. The player taps the one card
+ * in their hand that shows exactly that many of the target animal.
+ *
+ * Each animal is played over [subroundsTotal] timed sub-rounds ([roundMs]
+ * shrinks each one, fresh [cards] each time); clearing all sub-rounds removes
+ * the animal from the wheel and advances the [round]. [wrongPicks] are the cards
+ * already tapped wrongly this sub-round (one slip allowed). The board owns the
+ * spin animation + countdown and POSTs a `timeout` move (a loss) at zero.
+ */
+data class WheelView(
+    val wheel: List<String>,
+    val targetAnimal: String,
+    val targetCount: Int,
+    val cards: List<WheelCardView>,
+    val round: Int,
+    val roundsTotal: Int,
+    val subround: Int,
+    val subroundsTotal: Int,
+    val roundMs: Long,
+    val lastRound: Boolean,
+    val wrongPicks: List<Int>,
+    override val turnPlayerId: Int,
+    override val yourTurn: Boolean,
+    val finished: List<Int>,
+) : GameView {
+    companion object {
+        fun parse(o: JSONObject): WheelView {
+            val wheel = o.optJSONArray("wheel")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+            val arr = o.optJSONArray("cards")
+            val cards = if (arr == null) emptyList() else (0 until arr.length()).map { i ->
+                val c = arr.getJSONObject(i)
+                val co = c.optJSONObject("counts")
+                WheelCardView(c.getInt("id"), wheel.map { it to (co?.optInt(it) ?: 0) })
+            }
+            return WheelView(
+                wheel = wheel,
+                targetAnimal = o.optString("targetAnimal"),
+                targetCount = o.optInt("targetCount"),
+                cards = cards,
+                round = o.optInt("round"),
+                roundsTotal = o.optInt("roundsTotal"),
+                subround = o.optInt("subround"),
+                subroundsTotal = o.optInt("subroundsTotal"),
+                roundMs = o.optLong("roundMs"),
+                lastRound = o.optBoolean("lastRound"),
+                wrongPicks = o.optJSONArray("wrongPicks").toIntList(),
+                turnPlayerId = o.optInt("turnPlayerId"),
+                yourTurn = o.optBoolean("yourTurn"),
+                finished = o.optJSONArray("finished").toIntList(),
+            )
+        }
+    }
+}
+
+/**
+ * Odd One Out — a solo spot-the-difference game. Four of the five [cards] share
+ * the same animals (in the same order); one differs. The player taps the odd
+ * card before the [roundMs] timer runs out. Difficulty climbs each [round]
+ * (more animals, subtler differences); each round has [subroundsTotal] timed
+ * sub-rounds with fresh cards and a shrinking timer. [wrongPicks] are cards
+ * already tapped wrongly this sub-round (one slip allowed). The board owns the
+ * countdown and POSTs a `timeout` move (a loss) at zero.
+ */
+data class OddOneView(
+    val cards: List<WheelCardView>,
+    val round: Int,
+    val roundsTotal: Int,
+    val subround: Int,
+    val subroundsTotal: Int,
+    val roundMs: Long,
+    val wrongPicks: List<Int>,
+    override val turnPlayerId: Int,
+    override val yourTurn: Boolean,
+    val finished: List<Int>,
+) : GameView {
+    companion object {
+        fun parse(o: JSONObject): OddOneView {
+            val animals = o.optJSONArray("animals")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+            val arr = o.optJSONArray("cards")
+            val cards = if (arr == null) emptyList() else (0 until arr.length()).map { i ->
+                val c = arr.getJSONObject(i)
+                val co = c.optJSONObject("counts")
+                WheelCardView(c.getInt("id"), animals.map { it to (co?.optInt(it) ?: 0) })
+            }
+            return OddOneView(
+                cards = cards,
+                round = o.optInt("round"),
+                roundsTotal = o.optInt("roundsTotal"),
+                subround = o.optInt("subround"),
+                subroundsTotal = o.optInt("subroundsTotal"),
+                roundMs = o.optLong("roundMs"),
+                wrongPicks = o.optJSONArray("wrongPicks").toIntList(),
+                turnPlayerId = o.optInt("turnPlayerId"),
+                yourTurn = o.optBoolean("yourTurn"),
+                finished = o.optJSONArray("finished").toIntList(),
+            )
+        }
+    }
+}
+
+/** One card in Alphabet Lock: its [letter], whether it's [faceUp], and whether
+ *  it's the [wrong] card being shown briefly before everything flips back down. */
+data class SeqCardView(val id: Int, val letter: String, val faceUp: Boolean, val wrong: Boolean)
+
+/**
+ * Alphabet Lock — a solo memory game. Nine consecutive letters hide in a 3×3
+ * grid ([cards]); the player flips them in alphabetical [order]. A correct flip
+ * stays up ([progress] climbs); a [wrong] flip shows the letter, then a `hide`
+ * move flips every card back down (reset to the start). Flip all [total] in
+ * order to win. The board owns the brief reveal-then-hide on a wrong flip.
+ */
+data class SeqView(
+    val cards: List<SeqCardView>,
+    val order: List<String>,
+    val progress: Int,
+    val total: Int,
+    val wrong: Boolean,
+    override val turnPlayerId: Int,
+    override val yourTurn: Boolean,
+    val finished: List<Int>,
+) : GameView {
+    companion object {
+        fun parse(o: JSONObject): SeqView {
+            val arr = o.optJSONArray("cards")
+            val cards = if (arr == null) emptyList() else (0 until arr.length()).map { i ->
+                val c = arr.getJSONObject(i)
+                SeqCardView(c.getInt("id"), c.optString("letter"), c.optBoolean("faceUp"), c.optBoolean("wrong"))
+            }
+            val order = o.optJSONArray("order")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+            return SeqView(
+                cards = cards,
+                order = order,
+                progress = o.optInt("progress"),
+                total = o.optInt("total"),
+                wrong = o.optBoolean("wrong"),
+                turnPlayerId = o.optInt("turnPlayerId"),
+                yourTurn = o.optBoolean("yourTurn"),
+                finished = o.optJSONArray("finished").toIntList(),
             )
         }
     }
