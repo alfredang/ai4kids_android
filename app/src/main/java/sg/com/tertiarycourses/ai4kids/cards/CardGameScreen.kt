@@ -385,15 +385,18 @@ private fun Results(state: CardState, onAgain: () -> Unit) {
     val youWon = state.winners.firstOrNull() == state.you
     val solo = state.mode == "solo"
     val coop = state.mode == "coop"
+    // A solo game that finished with no winner = the player ran out of time.
+    val soloLost = solo && state.winners.isEmpty()
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth().kidCard().padding(28.dp),
     ) {
-        Text(if (youWon || coop || solo) "🏆" else "🎉", fontSize = 56.sp)
+        Text(if (soloLost) "😮" else if (youWon || coop || solo) "🏆" else "🎉", fontSize = 56.sp)
         Text(
             when {
+                soloLost -> "So close!"
                 solo -> "You did it!"
                 coop -> "You cleared it together!"
                 youWon -> "You win! 🎉"
@@ -456,6 +459,10 @@ private fun Board(state: CardState, busy: Boolean, onMove: (JSONObject) -> Unit)
             is BeatDieView -> BeatDieBoard(game, busy, onMove)
             is ShowdownView -> ShowdownBoard(game, state.players, busy, onMove)
             is MatchColoursView -> MatchColoursBoard(game, state.players, busy, onMove)
+            is MakeTenView -> MakeTenBoard(game, busy, onMove)
+            is WheelView -> WheelBoard(game, busy, onMove)
+            is OddOneView -> OddOneOutBoard(game, busy, onMove)
+            is SeqView -> AlphabetLockBoard(game, busy, onMove)
             else -> Text("Loading…", color = Theme.Ink.copy(alpha = 0.5f))
         }
     }

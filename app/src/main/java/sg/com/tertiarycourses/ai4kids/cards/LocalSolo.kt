@@ -4,10 +4,11 @@ import org.json.JSONObject
 import kotlin.random.Random
 
 /**
- * On-device solo engines — Kotlin ports of the four card games that offer a
- * solo mode (Memory Match, Tower Tumble, Number Hunt, Beat the Die). These let a
- * single player enjoy the games fully offline, with no sign-in: only the
- * online multiplayer modes talk to the backend.
+ * On-device solo engines — Kotlin ports of the card games that offer a solo
+ * mode (Memory Match, Tower Tumble, Number Hunt, Beat the Die, Make Ten,
+ * Animal Count, Odd One Out, Alphabet Lock). These let a single player enjoy the
+ * games fully offline, with no sign-in: only the online multiplayer modes talk
+ * to the backend.
  *
  * Each engine produces the same [GameView] shape and accepts the same move
  * payloads as the server, so the existing boards render them unchanged.
@@ -20,6 +21,9 @@ interface LocalEngine {
     fun view(): GameView
     fun move(m: JSONObject)
     val isOver: Boolean
+
+    /** True when the game ended in a loss (e.g. ran out of time) — no best time. */
+    val lost: Boolean get() = false
 }
 
 /** Wraps a solo engine and presents it to the UI as a one-player [CardState]. */
@@ -29,6 +33,10 @@ class LocalSession(val meta: CardGameMeta, pairs: Int) {
         "tower-tumble" -> DiscardLocal()
         "number-hunt" -> MathLocal()
         "beat-the-die" -> BeatDieLocal()
+        "make-ten" -> MakeTenLocal()
+        "animal-count" -> WheelLocal()
+        "odd-one-out" -> OddOneLocal()
+        "alphabet-lock" -> SeqLocal()
         else -> throw IllegalArgumentException("No solo mode for ${meta.slug}")
     }
     private var finished = false
@@ -38,27 +46,33 @@ class LocalSession(val meta: CardGameMeta, pairs: Int) {
         engine.move(move)
         if (engine.isOver) {
             finished = true
-            CardApi.recordSoloBest(meta.activitySlug, System.currentTimeMillis() - startedAt)
+            // A loss (e.g. timed out) doesn't count toward the best time.
+            if (!engine.lost) CardApi.recordSoloBest(meta.activitySlug, System.currentTimeMillis() - startedAt)
         }
     }
 
     private val startedAt = System.currentTimeMillis()
 
-    fun state(): CardState = CardState(
-        code = "SOLO",
-        gameSlug = meta.slug,
-        gameTitle = meta.title,
-        mode = "solo",
-        status = if (finished) "done" else "playing",
-        hostId = SOLO_ID,
-        you = SOLO_ID,
-        players = listOf(CardPlayer(SOLO_ID, "You", null, isHost = true, place = if (finished) 0 else null)),
-        winners = if (finished) listOf(SOLO_ID) else emptyList(),
-        game = engine.view(),
-        startedAt = null,
-        finishedAt = null,
-        bestMs = if (finished) CardApi.soloBest(meta.activitySlug) else null,
-    )
+    fun state(): CardState {
+        // A solo win has the player as the sole winner; a loss has no winner
+        // (the results screen reads an empty winners list as "out of time").
+        val won = finished && !engine.lost
+        return CardState(
+            code = "SOLO",
+            gameSlug = meta.slug,
+            gameTitle = meta.title,
+            mode = "solo",
+            status = if (finished) "done" else "playing",
+            hostId = SOLO_ID,
+            you = SOLO_ID,
+            players = listOf(CardPlayer(SOLO_ID, "You", null, isHost = true, place = if (won) 0 else null)),
+            winners = if (won) listOf(SOLO_ID) else emptyList(),
+            game = engine.view(),
+            startedAt = null,
+            finishedAt = null,
+            bestMs = if (won) CardApi.soloBest(meta.activitySlug) else null,
+        )
+    }
 
     companion object {
         const val SOLO_ID = 1
@@ -302,6 +316,324 @@ private class MathLocal : LocalEngine {
         drawCount = draw.size,
         yourHand = hand.toList(),
         hands = mapOf(LocalSession.SOLO_ID to hand.size),
+        turnPlayerId = LocalSession.SOLO_ID,
+        yourTurn = true,
+        finished = if (done) listOf(LocalSession.SOLO_ID) else emptyList(),
+    )
+}
+
+/* ----------------------------- Make Ten ----------------------------- */
+
+private class MakeTenLocal : LocalEngine {
+    private data class C(val id: Int, val value: Int)
+
+    // Number bonds that sum to 10. Building the deck only from these pairs
+    // guarantees the board is always clearable to empty (no dead ends), since
+    // each value keeps its complement balanced.
+    private val bonds = listOf(1 to 9, 2 to 8, 3 to 7, 4 to 6, 5 to 5)
+    private val goal = 12 // pairs to clear (24 cards)
+    private val cards = ArrayList<C>()
+    private var done = false
+    private var timedOut = false
+
+    // Per-round countdown that tightens as the board clears: 8s on the first
+    // pair, shrinking 0.4s each round down to a 3s floor. The board enforces it
+    // in real time and reports a "timeout" when the clock runs out.
+    private val startMs = 8_000L
+    private val stepMs = 400L
+    private val floorMs = 3_000L
+
+    private val cleared get() = goal - cards.size / 2
+    private val round get() = cleared + 1 // 1-based round currently in play
+    private fun budgetFor(r: Int): Long = (startMs - (r - 1) * stepMs).coerceAtLeast(floorMs)
+
+    init {
+        var id = 0
+        repeat(goal) {
+            val (a, b) = bonds.random()
+            cards.add(C(id++, a)); cards.add(C(id++, b))
+        }
+        cards.shuffle()
+    }
+
+    override val isOver: Boolean get() = done || timedOut
+    override val lost: Boolean get() = timedOut
+
+    override fun move(m: JSONObject) {
+        when (m.optString("type")) {
+            "clear" -> {
+                val ids = m.cardList()
+                if (ids.size != 2 || ids[0] == ids[1]) throw MoveError("Pick two different cards.")
+                val a = cards.firstOrNull { it.id == ids[0] } ?: throw MoveError("No such card.")
+                val b = cards.firstOrNull { it.id == ids[1] } ?: throw MoveError("No such card.")
+                if (a.value + b.value != 10) throw MoveError("${a.value} + ${b.value} = ${a.value + b.value}, not 10.")
+                cards.remove(a); cards.remove(b)
+                if (cards.isEmpty()) done = true
+            }
+            "timeout" -> timedOut = true
+            else -> throw MoveError("Unknown move.")
+        }
+    }
+
+    override fun view(): GameView = MakeTenView(
+        cards = cards.map { MakeTenCardView(it.id, it.value) },
+        cleared = cleared,
+        goal = goal,
+        round = round,
+        roundMs = budgetFor(round),
+        turnPlayerId = LocalSession.SOLO_ID,
+        yourTurn = true,
+        finished = if (done) listOf(LocalSession.SOLO_ID) else emptyList(),
+    )
+}
+
+/* ----------------------------- Critter Count ----------------------------- */
+
+private class WheelLocal : LocalEngine {
+    private data class Card(val id: Int, val counts: Map<String, Int>)
+
+    // Every card always shows all five animals (the full pool); only the *wheel*
+    // — the set of animals that can still be the target — shrinks each round.
+    private val pool = listOf("🐶", "🐱", "🐰", "🦊", "🐻")
+    private val wheel = pool.toMutableList()
+    private val roundsTotal = 5
+    private val subroundsTotal = 3
+    private val baseMs = 6_000L      // sub-round 1 budget
+    private val subStepMs = 1_500L   // shrink per sub-round
+    private val floorMs = 1_500L
+
+    private var round = 1
+    private var subround = 1
+    private var done = false
+    private var failed = false
+
+    private lateinit var targetAnimal: String
+    private var targetCount = 0
+    private var cards: List<Card> = emptyList()
+    private val wrongPicks = LinkedHashSet<Int>()
+    private var nextId = 0
+
+    private val lastRound get() = wheel.size <= 1
+
+    init { spin(); deal() }
+
+    /** Pick the round's target animal (the lone one on the last round) + number. */
+    private fun spin() {
+        targetAnimal = wheel.random()
+        targetCount = Random.nextInt(0, 3) // 0..2
+    }
+
+    /** Fresh hand of 5; exactly one card carries the target count (unique answer). */
+    private fun deal() {
+        wrongPicks.clear()
+        val answer = Random.nextInt(5)
+        cards = (0 until 5).map { i ->
+            val counts = HashMap<String, Int>()
+            for (a in pool) {
+                counts[a] = when {
+                    a != targetAnimal -> Random.nextInt(0, 3)
+                    i == answer -> targetCount
+                    else -> (0..2).filter { it != targetCount }.random()
+                }
+            }
+            Card(nextId++, counts)
+        }
+    }
+
+    private fun roundMs(): Long = (baseMs - (subround - 1) * subStepMs).coerceAtLeast(floorMs)
+
+    override val isOver: Boolean get() = done || failed
+    override val lost: Boolean get() = failed
+
+    override fun move(m: JSONObject) {
+        when (m.optString("type")) {
+            "pick" -> {
+                val id = m.optInt("cardId", -1)
+                val card = cards.firstOrNull { it.id == id } ?: throw MoveError("No such card.")
+                if (wrongPicks.contains(id)) throw MoveError("Already tried that one.")
+                if ((card.counts[targetAnimal] ?: 0) == targetCount) advance()
+                else {
+                    wrongPicks.add(id)
+                    if (wrongPicks.size >= 2) failed = true // only one slip per sub-round
+                }
+            }
+            "timeout" -> failed = true
+            else -> throw MoveError("Unknown move.")
+        }
+    }
+
+    private fun advance() {
+        if (subround < subroundsTotal) {
+            subround++; deal() // same animal/number, fresh cards, tighter timer
+            return
+        }
+        if (round >= roundsTotal) { done = true; return }
+        wheel.remove(targetAnimal) // retire the cleared animal from the wheel only
+        round++; subround = 1
+        spin(); deal()
+    }
+
+    override fun view(): GameView = WheelView(
+        wheel = wheel.toList(),
+        targetAnimal = targetAnimal,
+        targetCount = targetCount,
+        cards = cards.map { c -> WheelCardView(c.id, pool.map { it to (c.counts[it] ?: 0) }) },
+        round = round,
+        roundsTotal = roundsTotal,
+        subround = subround,
+        subroundsTotal = subroundsTotal,
+        roundMs = roundMs(),
+        lastRound = lastRound,
+        wrongPicks = wrongPicks.toList(),
+        turnPlayerId = LocalSession.SOLO_ID,
+        yourTurn = true,
+        finished = if (done) listOf(LocalSession.SOLO_ID) else emptyList(),
+    )
+}
+
+/* ----------------------------- Odd One Out ----------------------------- */
+
+private class OddOneLocal : LocalEngine {
+    private data class Card(val id: Int, val counts: Map<String, Int>)
+
+    private val pool = listOf("🐶", "🐱", "🐰", "🦊", "🐻")
+    private val roundsTotal = 5
+    private val subroundsTotal = 3
+    private val baseMs = 6_000L
+    private val subStepMs = 1_500L
+    private val floorMs = 1_500L
+
+    private var round = 1
+    private var subround = 1
+    private var done = false
+    private var failed = false
+
+    private var cards: List<Card> = emptyList()
+    private var oddId = -1
+    private val wrongPicks = LinkedHashSet<Int>()
+    private var nextId = 0
+
+    init { deal() }
+
+    /**
+     * Build four identical cards plus one "odd" card. Difficulty climbs with the
+     * round: more animal types and more emoji, so the single swapped animal on
+     * the odd card gets harder to spot.
+     */
+    private fun deal() {
+        wrongPicks.clear()
+        val variety = (round + 1).coerceIn(2, pool.size)   // animal types in play
+        val total = (round + 2).coerceIn(3, 8)             // emoji per card
+        val types = pool.take(variety)
+
+        val base = HashMap<String, Int>()
+        types.forEach { base[it] = 0 }
+        repeat(total) { val t = types.random(); base[t] = base[t]!! + 1 }
+
+        // The odd card swaps one emoji for a different animal (same total count).
+        val odd = HashMap(base)
+        val from = types.filter { (odd[it] ?: 0) > 0 }.random()
+        val to = types.filter { it != from }.random()
+        odd[from] = odd[from]!! - 1
+        odd[to] = (odd[to] ?: 0) + 1
+
+        val oddIdx = Random.nextInt(6)
+        cards = (0 until 6).map { i ->
+            Card(nextId++, HashMap(if (i == oddIdx) odd else base))
+        }
+        oddId = cards[oddIdx].id
+    }
+
+    private fun roundMs(): Long = (baseMs - (subround - 1) * subStepMs).coerceAtLeast(floorMs)
+
+    override val isOver: Boolean get() = done || failed
+    override val lost: Boolean get() = failed
+
+    override fun move(m: JSONObject) {
+        when (m.optString("type")) {
+            "pick" -> {
+                val id = m.optInt("cardId", -1)
+                if (cards.none { it.id == id }) throw MoveError("No such card.")
+                if (wrongPicks.contains(id)) throw MoveError("Already tried that one.")
+                if (id == oddId) advance()
+                else {
+                    wrongPicks.add(id)
+                    if (wrongPicks.size >= 2) failed = true // only one slip per sub-round
+                }
+            }
+            "timeout" -> failed = true
+            else -> throw MoveError("Unknown move.")
+        }
+    }
+
+    private fun advance() {
+        if (subround < subroundsTotal) { subround++; deal(); return }
+        if (round >= roundsTotal) { done = true; return }
+        round++; subround = 1; deal()
+    }
+
+    override fun view(): GameView = OddOneView(
+        cards = cards.map { c -> WheelCardView(c.id, pool.map { it to (c.counts[it] ?: 0) }) },
+        round = round,
+        roundsTotal = roundsTotal,
+        subround = subround,
+        subroundsTotal = subroundsTotal,
+        roundMs = roundMs(),
+        wrongPicks = wrongPicks.toList(),
+        turnPlayerId = LocalSession.SOLO_ID,
+        yourTurn = true,
+        finished = if (done) listOf(LocalSession.SOLO_ID) else emptyList(),
+    )
+}
+
+/* ----------------------------- Alphabet Lock ----------------------------- */
+
+private class SeqLocal : LocalEngine {
+    private data class Card(val id: Int, val letter: String)
+
+    private val total = 9
+    private val order: List<String> // the nine letters in alphabetical order
+    private val cards: List<Card>   // same letters shuffled into grid slots
+    private val revealed = LinkedHashSet<Int>() // correctly-flipped prefix
+    private var wrongCard: Int? = null
+    private var done = false
+
+    init {
+        val start = Random.nextInt(0, 26 - total + 1) // first letter, A..R
+        order = (0 until total).map { ('A' + start + it).toString() }
+        cards = order.shuffled().mapIndexed { i, l -> Card(i, l) }
+    }
+
+    private val progress get() = revealed.size
+    override val isOver: Boolean get() = done
+
+    override fun move(m: JSONObject) {
+        when (m.optString("type")) {
+            "flip" -> {
+                if (wrongCard != null) return // locked while a wrong card is shown
+                val id = m.optInt("cardId", -1)
+                val card = cards.firstOrNull { it.id == id } ?: return
+                if (revealed.contains(id)) return
+                if (card.letter == order[progress]) {
+                    revealed.add(id)
+                    if (revealed.size == total) done = true
+                } else {
+                    wrongCard = id // shown briefly; a "hide" then flips everything down
+                }
+            }
+            "hide" -> { revealed.clear(); wrongCard = null }
+            else -> throw MoveError("Unknown move.")
+        }
+    }
+
+    override fun view(): GameView = SeqView(
+        cards = cards.map { c ->
+            SeqCardView(c.id, c.letter, faceUp = revealed.contains(c.id) || c.id == wrongCard, wrong = c.id == wrongCard)
+        },
+        order = order,
+        progress = progress,
+        total = total,
+        wrong = wrongCard != null,
         turnPlayerId = LocalSession.SOLO_ID,
         yourTurn = true,
         finished = if (done) listOf(LocalSession.SOLO_ID) else emptyList(),
