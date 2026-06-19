@@ -9,13 +9,16 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.GlyphLayout
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
+import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
+import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack
 import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.viewport.FitViewport
 import sg.com.tertiarycourses.ai4kids.escape.CoopSession
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * The Robot Lab — a top-down LibGDX escape room, rebuilt from the Robot Lab in
@@ -204,10 +207,15 @@ class EscapeGdxGame(
 
     /* --- Robot Helper: put the learning steps in order ------------------ */
 
-    private inner class Order(private val steps: List<String>) : Puzzle() {
+    private inner class Order(
+        private val steps: List<String>,
+        private val heading: String = "Robot Helper",
+        private val subtitle: String = "Teach the robot to spot cats",
+    ) : Puzzle() {
         override val instruction = "Tap the steps in order"
         private var display = steps.indices.toList()
-        private val seq = ArrayList<Int>()
+        private val seq = ArrayList<Int>() // chosen step indices, in the order tapped
+        private val full get() = seq.size == steps.size
 
         override fun onOpen() {
             seq.clear()
@@ -220,16 +228,16 @@ class EscapeGdxGame(
             if (landscapePanel) floatArrayOf(PANEL_X + 28f, 480f - i * 145f, PANEL_W - 56f, 120f)
             else floatArrayOf(40f, 470f - i * 118f, 400f, 100f)
 
+        // Picks just queue up — no per-tap judging. The order is only checked once
+        // every card is chosen (green if right, a red flash if wrong, then retry).
         override fun onDown(p: Vector2) {
-            display.indices.forEach { j ->
-                if (inRect(p, cardRect(j))) {
-                    val step = display[j]
-                    when {
-                        step in seq -> seq.clear()        // tap a placed card to start over
-                        step == seq.size -> seq.add(step) // the correct next step → place it (green)
-                        else -> { wrongFlash = 1f; seq.clear() } // wrong order → reject, don't light it
-                    }
-                }
+            val j = display.indices.firstOrNull { inRect(p, cardRect(it)) } ?: return
+            if (full) seq.clear()        // a completed (wrong) attempt is showing → start over
+            val step = display[j]
+            if (step in seq) seq.clear() // tap an already-chosen card to undo and restart
+            else {
+                seq.add(step)
+                if (full && seq != steps.indices.toList()) wrongFlash = 1f // all chosen, wrong
             }
         }
 
@@ -243,33 +251,46 @@ class EscapeGdxGame(
 
             shapes.begin(ShapeRenderer.ShapeType.Filled)
             drawDimAndPanel()
+            val solved = complete
+            val wrongSet = full && !solved && wrongFlash > 0f // all chosen but wrong → flash red
             display.indices.forEach { j ->
                 val r = cardRect(j)
-                val placed = display[j] in seq
-                shapes.color = if (placed) cGood else cOpen
+                val sel = display[j] in seq
+                shapes.color = when {
+                    solved -> cGood                            // every card correct → green
+                    wrongSet -> Color(0.93f, 0.42f, 0.42f, 1f) // full but wrong → red
+                    sel -> Color(0.74f, 0.80f, 0.93f, 1f)      // chosen, awaiting the rest (neutral)
+                    else -> cOpen
+                }
                 shapes.rect(r[0], r[1], r[2], r[3])
-                shapes.color = if (placed) Color.WHITE else cAccent
+                shapes.color = if (sel) Color.WHITE else cAccent
                 shapes.circle(r[0] + badgeDx, r[1] + r[3] / 2f, badgeR)
             }
             shapes.end()
 
             batch.begin()
             font.color = cInk
-            centerText("Robot Helper", W / 2f, 650f, if (land) 1.7f else 1.45f)
-            centerText("Teach the robot to spot cats", W / 2f, 620f, if (land) 1.1f else 0.95f)
+            centerText(heading, W / 2f, 650f, if (land) 1.7f else 1.45f)
+            centerText(subtitle, W / 2f, 620f, if (land) 1.1f else 0.95f)
             display.indices.forEach { j ->
                 val r = cardRect(j)
-                val placed = display[j] in seq
-                // White on the purple/green badge reads clearly in both states.
-                font.color = if (placed) cGood else Color.WHITE
-                val badge = if (placed) (seq.indexOf(display[j]) + 1).toString() else "?"
+                val sel = display[j] in seq
+                // A chosen card shows its pick order; unchosen shows "?".
+                font.color = if (complete) cGood else if (sel) cAccent else Color.WHITE
+                val badge = if (sel) (seq.indexOf(display[j]) + 1).toString() else "?"
                 centerText(badge, r[0] + badgeDx, r[1] + r[3] / 2f, if (land) 1.6f else 1.3f)
                 // Step text left-aligned beside the badge, vertically centred.
                 font.color = cInk
                 wrapLeft(steps[display[j]], r[0] + textDx, r[1] + r[3] / 2f, r[2] - textDx - 30f, if (land) 1.35f else 0.98f)
             }
-            font.color = cInk
-            centerText(instruction, W / 2f, if (land) 158f else 188f, if (land) 1.1f else 0.95f)
+            val footY = if (land) 158f else 188f
+            if (full && !complete && wrongFlash > 0f) {
+                font.color = Color(0.93f, 0.42f, 0.42f, 1f)
+                centerText("Wrong order — try again!", W / 2f, footY, if (land) 1.1f else 0.95f)
+            } else {
+                font.color = cInk
+                centerText(instruction, W / 2f, footY, if (land) 1.1f else 0.95f)
+            }
             drawBackLabel()
             batch.end()
         }
@@ -278,16 +299,24 @@ class EscapeGdxGame(
     /* --- Symbol Decoder: substitution cipher ---------------------------- */
 
     private inner class Cipher(
-        private val legendLetters: List<Char>, // legendLetters[k] is the letter for glyph-kind k
-        private val coded: List<Int>,           // glyph kinds spelling the answer
+        private val legendLetters: List<Char>, // the letters shown in the key (must include every answer letter)
         private val answer: String,
     ) : Puzzle() {
         override val instruction = "Read the key, spell the word"
         private val typed = StringBuilder()
         private var done = false
-        private val tileLetters = legendLetters + '<'
+        // The glyph↔letter pairing is reshuffled each open so the answer letters
+        // never sit in order in the key — glyph-kind k decodes to legend[k].
+        private var legend = legendLetters
+        private var coded = listOf<Int>()
+        private var tileLetters = legendLetters + '<'
 
-        override fun onOpen() { typed.setLength(0); done = false }
+        override fun onOpen() {
+            typed.setLength(0); done = false
+            legend = legendLetters.shuffled()
+            coded = answer.map { legend.indexOf(it) }
+            tileLetters = legend + '<'
+        }
 
         // Landscape stacks the legend in a 2x4 block on the left; portrait is a 4x2 row.
         private fun legendRect(k: Int): FloatArray {
@@ -337,7 +366,7 @@ class EscapeGdxGame(
             shapes.begin(ShapeRenderer.ShapeType.Filled)
             drawDimAndPanel()
             // Legend cells.
-            legendLetters.indices.forEach { k ->
+            legend.indices.forEach { k ->
                 val r = legendRect(k)
                 shapes.color = cOpen
                 shapes.rect(r[0], r[1], r[2], r[3])
@@ -357,7 +386,7 @@ class EscapeGdxGame(
 
             batch.begin()
             // Symbol pictograms — legend keys + the coded message (anti-aliased).
-            legendLetters.indices.forEach { k ->
+            legend.indices.forEach { k ->
                 val r = legendRect(k)
                 drawGlyph(k, r[0] + 20f, r[1] + r[3] / 2f, 12f)
             }
@@ -366,10 +395,10 @@ class EscapeGdxGame(
             }
             font.color = cInk
             centerText("Symbol Decoder", W / 2f, 650f, 1.35f)
-            legendLetters.indices.forEach { k ->
+            legend.indices.forEach { k ->
                 val r = legendRect(k)
                 font.color = cInk
-                centerText("= ${legendLetters[k]}", r[0] + r[2] - 24f, r[1] + r[3] / 2f, 1.0f)
+                centerText("= ${legend[k]}", r[0] + r[2] - 24f, r[1] + r[3] / 2f, 1.0f)
             }
             font.color = cInk
             centerText("Secret word:", W / 2f, 498f, 0.9f)
@@ -398,9 +427,11 @@ class EscapeGdxGame(
     ) : Puzzle() {
         override val instruction = "Drag across a glowing word"
         private val n = grid.size
-        private val cell = 44f
-        private val x0 get() = (W - n * cell) / 2f // centred; follows the canvas width
-        private val top = 582f
+        // Landscape has the horizontal room for a bigger grid (the word list moves
+        // to the right column); portrait keeps the compact centred layout.
+        private val cell get() = if (landscapePanel) 56f else 44f
+        private val x0 get() = if (landscapePanel) PANEL_X + 70f else (W - n * cell) / 2f
+        private val top get() = if (landscapePanel) 610f else 582f
         private val found = HashSet<String>()
         private val foundCells = HashSet<Int>()
         private var startCell = -1
@@ -462,27 +493,48 @@ class EscapeGdxGame(
             shapes.end()
 
             batch.begin()
+            val gcx = x0 + n * cell / 2f // grid centre (== W/2 in portrait)
             font.color = cInk
-            centerText("Word Display", W / 2f, 656f, 1.1f)
+            centerText("Word Display", gcx, 656f, 1.1f)
             for (c in 0 until n) centerText((c + 1).toString(), cx(c), top + 16f, 0.7f)
             for (r in 0 until n) centerText((r + 1).toString(), x0 - 16f, cy(r) + 6f, 0.7f)
+            val letterScale = if (landscapePanel) 1.05f else 0.85f
             for (row in 0 until n) for (col in 0 until n) {
                 val idx = row * n + col
                 // Letters are scrambled-out static until the display powers on.
                 font.color = if (!on) Color(0.30f, 0.30f, 0.34f, 1f)
                     else if (idx in foundCells || (complete && row == crossRow && col == crossCol)) Color.WHITE else cInk
-                centerText(if (on) grid[row][col].toString() else "?", cx(col), cy(row) + 6f, 0.85f)
+                centerText(if (on) grid[row][col].toString() else "?", cx(col), cy(row) + 6f, letterScale)
             }
-            // Words to find: masked until their machine lights them up.
-            font.color = cInk
-            val list = words.joinToString("   ") {
-                when { it in found -> "[$it]"; isWordRevealed(it) -> it; else -> "?".repeat(it.length) }
-            }
-            centerText(list, W / 2f, 196f, 0.8f)
-            when {
-                !on -> { font.color = Color(0.96f, 0.6f, 0.3f, 1f); centerText("Power up the display — solve every machine first!", W / 2f, 166f, 0.72f) }
-                complete -> { font.color = cGood; centerText("They cross at Column ${crossCol + 1}, Row ${crossRow + 1}!", W / 2f, 166f, 0.78f) }
-                else -> centerText(instruction, W / 2f, 166f, 0.7f)
+            // Words to find: masked until their machine lights them up. In landscape
+            // they stack in the right column beside the grid; in portrait, along the
+            // bottom as before.
+            fun wordText(w: String) = when { w in found -> "[$w]"; isWordRevealed(w) -> w; else -> "?".repeat(w.length) }
+            if (landscapePanel) {
+                val listLeft = x0 + n * cell + 40f
+                val listRight = PANEL_X + PANEL_W - 40f
+                val colCx = (listLeft + listRight) / 2f
+                val colW = listRight - listLeft
+                font.color = cInk
+                centerText("Find these:", colCx, 540f, 1.0f)
+                words.forEachIndexed { i, w ->
+                    font.color = if (w in found) cGood else cInk
+                    centerText(wordText(w), colCx, 492f - i * 48f, 1.1f)
+                }
+                val statusY = 478f - words.size * 48f
+                when {
+                    !on -> { font.color = Color(0.96f, 0.6f, 0.3f, 1f); wrapText("Power up the display — solve every machine first!", colCx, statusY, colW, 0.78f) }
+                    complete -> { font.color = cGood; wrapText("They cross at Column ${crossCol + 1}, Row ${crossRow + 1}!", colCx, statusY, colW, 0.82f) }
+                    else -> centerText(instruction, colCx, statusY, 0.8f)
+                }
+            } else {
+                font.color = cInk
+                centerText(words.joinToString("   ") { wordText(it) }, W / 2f, 196f, 0.8f)
+                when {
+                    !on -> { font.color = Color(0.96f, 0.6f, 0.3f, 1f); centerText("Power up the display — solve every machine first!", W / 2f, 166f, 0.72f) }
+                    complete -> { font.color = cGood; centerText("They cross at Column ${crossCol + 1}, Row ${crossRow + 1}!", W / 2f, 166f, 0.78f) }
+                    else -> centerText(instruction, W / 2f, 166f, 0.7f)
+                }
             }
             drawBackLabel()
             batch.end()
@@ -498,8 +550,7 @@ class EscapeGdxGame(
 
         override fun draw() {
             shapes.begin(ShapeRenderer.ShapeType.Filled)
-            // Dim the scene, then the clue card. The parchment is a placeholder —
-            // swap this rect for a drawn Texture (the asset) at the same bounds.
+            // Dim the scene, then the clue card.
             shapes.color = Color(0f, 0f, 0f, 0.6f)
             shapes.rect(0f, 0f, W, H)
             shapes.color = Color(0.96f, 0.91f, 0.66f, 1f)
@@ -512,8 +563,81 @@ class EscapeGdxGame(
             shapes.end()
 
             batch.begin()
+            font.color = cInk
+            // The clue card is shared by every level; draw the art that fits this one.
+            when (currentLevel) {
+                robotLab -> { centerText("Lab Note", W / 2f, 612f, 1.2f); drawLabSketch() }
+                tower -> { centerText("Room Map", W / 2f, 612f, 1.2f); drawCastleMap() }
+                else -> centerText("Note", W / 2f, 612f, 1.2f)
+            }
             drawBackLabel()
             batch.end()
+        }
+
+        /** The kindness-castle map: a vertical tower of floors with each core (a
+         *  coloured numbered disc on the Landing) and its matching Core Charger cell
+         *  (the same number/colour), so the player knows which core to carry where.
+         *  Floors, bottom (Foyer) → top (the Suit), mirror the level's 2x4 grid. */
+        private fun drawCastleMap() {
+            val cx = W / 2f
+            val left = cx - 118f; val right = cx + 118f
+            val bottom = 196f; val top = 576f
+            val r1 = 291f; val r2 = 386f; val r3 = 481f // floor dividers, bottom→top
+            val tan = Color(0.85f, 0.55f, 0.42f, 1f)
+            val yellow = Color(0.98f, 0.80f, 0.25f, 1f) // fairness charger → core 1
+            val blue = Color(0.34f, 0.62f, 0.96f, 1f)   // honesty charger  → core 2
+            val green = Color(0.34f, 0.82f, 0.48f, 1f)  // kindness charger → core 3
+            // Outline + floor dividers (straight rules).
+            smooth.line(batch, left, bottom, right, bottom, 5f, tan)
+            smooth.line(batch, left, top, right, top, 5f, tan)
+            smooth.line(batch, left, bottom, left, top, 5f, tan)
+            smooth.line(batch, right, bottom, right, top, 5f, tan)
+            smooth.line(batch, left, r1, right, r1, 5f, tan)
+            smooth.line(batch, left, r2, right, r2, 5f, tan)
+            smooth.line(batch, left, r3, right, r3, 5f, tan)
+            // Vertical splits in the two charger floors (honesty|fairness, suit|kindness).
+            smooth.line(batch, cx, r1, cx, r2, 5f, tan)
+            smooth.line(batch, cx, r3, cx, top, 5f, tan)
+            // Charger-cell numbers, coloured like the room they stand for.
+            fun digit(s: String, x: Float, y: Float, c: Color) { font.color = c; centerText(s, x, y, 1.5f) }
+            digit("2", cx - 59f, (r1 + r2) / 2f, blue)    // honesty (left)
+            digit("1", cx + 59f, (r1 + r2) / 2f, yellow)  // fairness (right)
+            digit("3", cx + 59f, (r3 + top) / 2f, green)  // kindness (right)
+            // The Suit goal sits top-left (the Attic): a green target ring.
+            val suitX = cx - 59f; val suitY = (r3 + top) / 2f
+            smooth.circle(batch, suitX, suitY, 15f, cGood)
+            smooth.circle(batch, suitX, suitY, 9f, Color(0.96f, 0.91f, 0.66f, 1f)) // parchment hole
+            // The three loose cores on the Landing, as numbered colour discs.
+            val coreY = (r2 + r3) / 2f
+            val cores = listOf(Triple("1", yellow, cx - 46f), Triple("2", blue, cx), Triple("3", green, cx + 46f))
+            cores.forEach { (n, col, x) ->
+                smooth.circle(batch, x, coreY, 17f, col)
+                font.color = Color.WHITE; centerText(n, x, coreY, 1.0f)
+            }
+        }
+
+        /** The hand-drawn clue: path "1" runs across, path "2" runs down, and they
+         *  meet at a scrawled red X (where the words cross). The paths are straight
+         *  horizontal/vertical rules; only the X keeps its crossed-stroke look. */
+        private fun drawLabSketch() {
+            val cx = W / 2f
+            val crossX = cx + 58f
+            val crossY = 360f
+            val tan = Color(0.85f, 0.55f, 0.42f, 1f)
+            val red = Color(0.80f, 0.22f, 0.18f, 1f)
+            // "1 ——": the across stroke along the bottom (straight horizontal).
+            smooth.line(batch, cx - 104f, crossY, crossX - 44f, crossY, 7f, tan)
+            // "2 |": the down stroke (straight vertical), meeting the across line.
+            smooth.line(batch, crossX, 506f, crossX, crossY + 28f, 7f, tan)
+            // The red X where the two paths cross.
+            smooth.line(batch, crossX - 24f, crossY - 24f, crossX + 24f, crossY + 24f, 8f, red)
+            smooth.line(batch, crossX + 24f, crossY - 24f, crossX - 24f, crossY + 24f, 8f, red)
+            // The "1" and "2" labels, with what each path counts off, in marker tan.
+            font.color = tan
+            centerText("1", cx - 128f, crossY, 1.7f)
+            centerText("row", cx - 128f, crossY - 26f, 0.7f)
+            centerText("2", crossX, 540f, 1.7f)
+            centerText("column", crossX, 514f, 0.7f)
         }
     }
 
@@ -583,9 +707,10 @@ class EscapeGdxGame(
         // Connection bits: N=1, E=2, S=4, W=8 (grid row 0 = top).
         private val rowsN = 3
         private val colsN = 3
-        private val cell = 92f
+        // Bigger tiles in landscape, where there's room; portrait keeps 92f.
+        private val cell get() = if (landscapePanel) 120f else 92f
         private val gap = 8f
-        private val pitch = cell + gap
+        private val pitch get() = cell + gap
         // Computed from the current width so the grid stays centred when the
         // canvas widens in landscape.
         private val gridX0 get() = (W - (colsN * cell + (colsN - 1) * gap)) / 2f
@@ -667,28 +792,31 @@ class EscapeGdxGame(
 
             batch.begin()
             // Pipes & nodes — anti-aliased, round-capped (SmoothDraw) — over the cells.
+            // Stroke/node sizes scale with the tile so they look right at any size.
+            val k = cell / 92f
+            val pipeTh = 13f * k; val nodeR = 9f * k; val endR = 13f * k; val endOff = 16f * k
             for (r in 0 until rowsN) for (c in 0 until colsN) {
                 val rect = cellRect(r, c)
                 val cx = rect[0] + cell / 2f; val cy = rect[1] + cell / 2f
                 val col = if (powered[idx(r, c)]) cGood else Color(0.62f, 0.64f, 0.72f, 1f)
                 val m = mask[idx(r, c)]
-                if (m and 1 != 0) smooth.line(batch, cx, cy, cx, cy + cell / 2f, 13f, col)
-                if (m and 4 != 0) smooth.line(batch, cx, cy, cx, cy - cell / 2f, 13f, col)
-                if (m and 2 != 0) smooth.line(batch, cx, cy, cx + cell / 2f, cy, 13f, col)
-                if (m and 8 != 0) smooth.line(batch, cx, cy, cx - cell / 2f, cy, 13f, col)
-                smooth.circle(batch, cx, cy, 9f, col)
+                if (m and 1 != 0) smooth.line(batch, cx, cy, cx, cy + cell / 2f, pipeTh, col)
+                if (m and 4 != 0) smooth.line(batch, cx, cy, cx, cy - cell / 2f, pipeTh, col)
+                if (m and 2 != 0) smooth.line(batch, cx, cy, cx + cell / 2f, cy, pipeTh, col)
+                if (m and 8 != 0) smooth.line(batch, cx, cy, cx - cell / 2f, cy, pipeTh, col)
+                smooth.circle(batch, cx, cy, nodeR, col)
             }
             // Power inlet (left of source) and the bulb (right of the target).
             val s = cellRect(srcR, srcC); val b = cellRect(bulbR, bulbC)
-            smooth.circle(batch, s[0] - 16f, s[1] + cell / 2f, 13f, Color(0.95f, 0.80f, 0.22f, 1f))
-            smooth.circle(batch, b[0] + cell + 16f, b[1] + cell / 2f, 13f, if (complete) cGood else Color(0.62f, 0.64f, 0.72f, 1f))
+            smooth.circle(batch, s[0] - endOff, s[1] + cell / 2f, endR, Color(0.95f, 0.80f, 0.22f, 1f))
+            smooth.circle(batch, b[0] + cell + endOff, b[1] + cell / 2f, endR, if (complete) cGood else Color(0.62f, 0.64f, 0.72f, 1f))
             font.color = cInk
             centerText("Power Circuit", W / 2f, 636f, 1.2f)
             centerText("Spin the pipes to connect power to the bulb", W / 2f, 612f, 0.7f)
             font.color = Color(0.85f, 0.6f, 0.1f, 1f)
-            centerText("PWR", s[0] - 16f, s[1] + cell / 2f - 26f, 0.62f)
+            centerText("PWR", s[0] - endOff, s[1] + cell / 2f - 26f * k, 0.62f)
             font.color = if (complete) cGood else cInk
-            centerText("BULB", b[0] + cell + 16f, b[1] + cell / 2f - 26f, 0.62f)
+            centerText("BULB", b[0] + cell + endOff, b[1] + cell / 2f - 26f * k, 0.62f)
             if (complete) { font.color = cGood; centerText("Power on!", W / 2f, 168f, 1f) }
             drawBackLabel()
             batch.end()
@@ -750,9 +878,9 @@ class EscapeGdxGame(
             shapes.end()
 
             batch.begin()
-            animalGlyphs.forEachIndexed { i, g -> drawGlyph(g, colX(i), 500f, 24f) }
+            animalGlyphs.forEachIndexed { i, g -> drawAnimal(g, colX(i), 500f, 24f) }
             font.color = cInk
-            centerText("Fairness Core", W / 2f, 650f, 1.2f)
+            centerText("Fairness Core Charger", W / 2f, 650f, 1.2f)
             centerText("Share the treats so everyone gets the same", W / 2f, 624f, 0.72f)
             animalGlyphs.indices.forEach { i ->
                 font.color = cInk
@@ -777,14 +905,40 @@ class EscapeGdxGame(
         private val cKind = Color(0.20f, 0.62f, 0.78f, 1f)
         private val cMean = Color(0.92f, 0.45f, 0.35f, 1f)
         private val choice = arrayOfNulls<Boolean>(items.size)
+        // Vertical scroll: in landscape the larger rows don't all fit, so the list
+        // scrolls inside a clipped window (the header/footer stay fixed).
+        private var scroll = 0f
+        private var lastY = 0f; private var startY = 0f; private var moved = false
+        private val clipRect = Rectangle(); private val scissor = Rectangle()
 
-        override fun onOpen() { for (i in choice.indices) choice[i] = null }
+        private val land get() = landscapePanel
+        private val rowH get() = if (land) 86f else 60f
+        private val pitch get() = if (land) 102f else 72f
+        private val rowX get() = if (land) PANEL_X + 24f else 36f
+        private val rowW get() = if (land) PANEL_W - 48f else W - 72f
+        private val firstTop get() = if (land) 592f else 616f // top edge of row 0 at scroll 0
+        private val btnW get() = if (land) 104f else 62f
+        private val btnH get() = if (land) 60f else 44f
+        private val winTop get() = if (land) 602f else 700f    // scroll window (clip band)
+        private val winBottom get() = if (land) 150f else 120f
+        private val maxScroll get() = (items.size * pitch - (winTop - winBottom)).coerceAtLeast(0f)
 
-        private fun rowRect(i: Int) = floatArrayOf(36f, 556f - i * 72f, W - 72f, 60f)
-        private fun kBtn(i: Int): FloatArray { val r = rowRect(i); return floatArrayOf(r[0] + r[2] - 138f, r[1] + 8f, 62f, 44f) }
-        private fun mBtn(i: Int): FloatArray { val r = rowRect(i); return floatArrayOf(r[0] + r[2] - 70f, r[1] + 8f, 62f, 44f) }
+        override fun onOpen() { for (i in choice.indices) choice[i] = null; scroll = 0f; moved = false }
 
-        override fun onDown(p: Vector2) {
+        // Row i's top edge slides with the scroll offset.
+        private fun rowRect(i: Int): FloatArray { val t = firstTop - i * pitch + scroll; return floatArrayOf(rowX, t - rowH, rowW, rowH) }
+        private fun kBtn(i: Int): FloatArray { val r = rowRect(i); return floatArrayOf(r[0] + r[2] - 2f * btnW - 28f, r[1] + (rowH - btnH) / 2f, btnW, btnH) }
+        private fun mBtn(i: Int): FloatArray { val r = rowRect(i); return floatArrayOf(r[0] + r[2] - btnW - 16f, r[1] + (rowH - btnH) / 2f, btnW, btnH) }
+        private fun rowVisible(r: FloatArray) = r[1] + rowH >= winBottom && r[1] <= winTop
+
+        override fun onDown(p: Vector2) { startY = p.y; lastY = p.y; moved = false }
+        override fun onDrag(p: Vector2) {
+            if (maxScroll > 0f) scroll = (scroll + (p.y - lastY)).coerceIn(0f, maxScroll)
+            lastY = p.y
+            if (abs(p.y - startY) > 6f) moved = true
+        }
+        override fun onUp(p: Vector2) {
+            if (moved) return // a scroll drag, not a tap
             items.indices.forEach { i ->
                 if (inRect(p, kBtn(i))) choice[i] = true
                 else if (inRect(p, mBtn(i))) choice[i] = false
@@ -794,87 +948,253 @@ class EscapeGdxGame(
         override val complete: Boolean get() = items.indices.all { choice[it] == items[it].second }
 
         override fun draw() {
+            val clipping = maxScroll > 0f
+            if (clipping) {
+                clipRect.set(PANEL_X, winBottom, PANEL_W, winTop - winBottom)
+                ScissorStack.calculateScissors(puzzleCam, batch.transformMatrix, clipRect, scissor)
+            }
             shapes.begin(ShapeRenderer.ShapeType.Filled)
             drawDimAndPanel()
+            shapes.end()
+
+            // Statement rows + Kind/Mean buttons, clipped to the scroll window.
+            shapes.begin(ShapeRenderer.ShapeType.Filled)
+            val pushedShapes = clipping && ScissorStack.pushScissors(scissor)
             items.indices.forEach { i ->
                 val r = rowRect(i)
+                if (!rowVisible(r)) return@forEach
                 shapes.color = cOpen; shapes.rect(r[0], r[1], r[2], r[3])
                 val k = kBtn(i); shapes.color = if (choice[i] == true) cKind else Color(0.85f, 0.87f, 0.92f, 1f); shapes.rect(k[0], k[1], k[2], k[3])
                 val m = mBtn(i); shapes.color = if (choice[i] == false) cMean else Color(0.85f, 0.87f, 0.92f, 1f); shapes.rect(m[0], m[1], m[2], m[3])
             }
             shapes.end()
+            if (pushedShapes) ScissorStack.popScissors()
+
+            val textScale = if (land) 0.92f else 0.68f
+            val btnScale = if (land) 0.78f else 0.6f
+            batch.begin()
+            val pushedText = clipping && ScissorStack.pushScissors(scissor)
+            items.forEachIndexed { i, item ->
+                val r = rowRect(i)
+                if (!rowVisible(r)) return@forEachIndexed
+                font.color = cInk
+                wrapLeft(item.first, r[0] + 18f, r[1] + rowH / 2f, r[2] - 2f * btnW - 64f, textScale)
+                val k = kBtn(i); font.color = if (choice[i] == true) Color.WHITE else cInk
+                centerText("Kind", k[0] + k[2] / 2f, k[1] + k[3] / 2f, btnScale)
+                val m = mBtn(i); font.color = if (choice[i] == false) Color.WHITE else cInk
+                centerText("Mean", m[0] + m[2] / 2f, m[1] + m[3] / 2f, btnScale)
+            }
+            batch.end()
+            if (pushedText) ScissorStack.popScissors()
+
+            // Scrollbar, only when the list overflows.
+            if (clipping) {
+                val win = winTop - winBottom
+                val trackX = PANEL_X + PANEL_W - 16f
+                val thumbH = (win * win / (items.size * pitch)).coerceAtLeast(28f)
+                val thumbY = winTop - thumbH - (scroll / maxScroll) * (win - thumbH)
+                shapes.begin(ShapeRenderer.ShapeType.Filled)
+                shapes.color = Color(0.85f, 0.87f, 0.92f, 1f); shapes.rect(trackX, winBottom, 6f, win)
+                shapes.color = Color(0.55f, 0.58f, 0.66f, 1f); shapes.rect(trackX, thumbY, 6f, thumbH)
+                shapes.end()
+            }
 
             batch.begin()
             font.color = cInk
-            centerText("Kindness Core", W / 2f, 650f, 1.2f)
+            centerText("Kindness Core Charger", W / 2f, 650f, 1.2f)
             centerText("Tap Kind or Mean for each one", W / 2f, 624f, 0.72f)
-            items.forEachIndexed { i, item ->
-                val r = rowRect(i)
-                font.color = cInk
-                wrapLeft(item.first, r[0] + 16f, r[1] + r[3] / 2f, r[2] - 160f, 0.68f)
-                val k = kBtn(i); font.color = if (choice[i] == true) Color.WHITE else cInk
-                centerText("Kind", k[0] + k[2] / 2f, k[1] + k[3] / 2f, 0.6f)
-                val m = mBtn(i); font.color = if (choice[i] == false) Color.WHITE else cInk
-                centerText("Mean", m[0] + m[2] / 2f, m[1] + m[3] / 2f, 0.6f)
-            }
             drawBackLabel()
             batch.end()
         }
     }
 
-    /* --- Honesty Core: choose the honest path at each fork ------------- */
+    /* --- Honesty Core: an actual fog-of-war maze with honesty signposts ---
+     * A faithful port of the web app's MazePuzzle (src/lib/maze-pool.ts): a real
+     * 11x11 grid ('#' wall, '.' path, 'S' start, 'G' goal) walked one cell at a
+     * time. Only a 3x3 area around the hero is ever lit (fog of war), and at the
+     * forks a signpost frames the honest choice (the emoji arrows are reworded to
+     * plain words since the BitmapFont is ASCII-only). Reach the goal to solve. */
 
-    private inner class Maze(
-        private val forks: List<Pair<String, String>>, // (honest, lie); honest is the way forward
-    ) : Puzzle() {
-        override val instruction = "Choose the honest path"
-        private var at = 0
+    private class MazeSign(val r: Int, val c: Int, val text: String)
+    private class MazeVariant(val grid: List<String>, val signs: List<MazeSign>)
+
+    private inner class Maze(private val variants: List<MazeVariant>) : Puzzle() {
+        override val instruction = "Walk the honest path to the heart"
+        private lateinit var v: MazeVariant
+        private var pr = 0; private var pc = 0   // hero row/col
+        private var gr = 0; private var gc = 0   // goal row/col
+        private val seen = HashSet<Int>()
         private var done = false
-        private var order = listOf(0, 1)
 
-        override fun onOpen() { at = 0; done = false; order = listOf(0, 1).shuffled() }
+        private fun key(r: Int, c: Int) = r * 100 + c
+        private val rows get() = v.grid.size
+        private val cols get() = v.grid[0].length
+        // Landscape puts the maze on the left with bigger cells; portrait stacks the
+        // maze on top with smaller cells, leaving room for the D-pad below.
+        private val cell get() = if (landscapePanel) 30f else 22f
+        private val gx0 get() = if (landscapePanel) PANEL_X + 80f else (W - cols * cell) / 2f
+        private val gy0 get() = if (landscapePanel) 235f else 360f   // grid bottom edge
+        private fun cellX(c: Int) = gx0 + c * cell
+        private fun cellY(r: Int) = gy0 + (rows - 1 - r) * cell      // grid row 0 = top
 
-        private fun optRect(j: Int) = floatArrayOf(48f, 446f - j * 118f, W - 96f, 100f)
+        // Virtual D-pad: a 4-way cross — right of the maze in landscape, below it in portrait.
+        private val padR get() = if (landscapePanel) 30f else 26f
+        private val padGap get() = if (landscapePanel) 62f else 50f
+        private val padCx get() = if (landscapePanel) PANEL_X + PANEL_W - 150f else W / 2f
+        private val padCy get() = if (landscapePanel) 400f else 205f
+        private fun padBtn(cx: Float, cy: Float) = floatArrayOf(cx - padR, cy - padR, 2 * padR, 2 * padR)
+
+        override fun onOpen() {
+            v = variants.random()
+            seen.clear(); done = false
+            v.grid.forEachIndexed { r, row -> row.forEachIndexed { c, ch ->
+                if (ch == 'S') { pr = r; pc = c }; if (ch == 'G') { gr = r; gc = c }
+            } }
+            reveal(pr, pc)
+        }
+
+        /** Light up the 3x3 area around the hero. */
+        private fun reveal(r: Int, c: Int) {
+            for (dr in -1..1) for (dc in -1..1) {
+                val rr = r + dr; val cc = c + dc
+                if (rr in 0 until rows && cc in 0 until cols) seen.add(key(rr, cc))
+            }
+        }
+
+        private fun walkable(r: Int, c: Int) = r in 0 until rows && c in 0 until cols && v.grid[r][c] != '#'
+
+        private fun move(dr: Int, dc: Int) {
+            val rr = pr + dr; val cc = pc + dc
+            if (!walkable(rr, cc)) return // a wall blocks the step
+            pr = rr; pc = cc; reveal(pr, pc)
+            if (pr == gr && pc == gc) done = true
+        }
 
         override fun onDown(p: Vector2) {
-            (0..1).forEach { j ->
-                if (inRect(p, optRect(j))) {
-                    if (order[j] == 0) { // the honest statement
-                        at++
-                        if (at >= forks.size) done = true else order = listOf(0, 1).shuffled()
-                    } else { wrongFlash = 1f; at = 0; order = listOf(0, 1).shuffled() } // a lie = dead end → back to start
-                }
+            if (done) return
+            // Row 0 is the top of the grid, so "up" decreases the row.
+            when {
+                inRect(p, padBtn(padCx, padCy + padGap)) -> move(-1, 0)
+                inRect(p, padBtn(padCx, padCy - padGap)) -> move(1, 0)
+                inRect(p, padBtn(padCx - padGap, padCy)) -> move(0, -1)
+                inRect(p, padBtn(padCx + padGap, padCy)) -> move(0, 1)
             }
         }
 
         override val complete: Boolean get() = done
 
+        /** A round D-pad button with a white chevron pointing [dir] (U/D/L/R). */
+        private fun drawPadButton(cx: Float, cy: Float, dir: Char) {
+            smooth.circle(batch, cx, cy, padR, cAccent)
+            val a = padR * 0.42f; val t = padR * 0.18f; val w = Color.WHITE
+            when (dir) {
+                'U' -> { smooth.line(batch, cx - a, cy - a * 0.4f, cx, cy + a * 0.6f, t, w); smooth.line(batch, cx, cy + a * 0.6f, cx + a, cy - a * 0.4f, t, w) }
+                'D' -> { smooth.line(batch, cx - a, cy + a * 0.4f, cx, cy - a * 0.6f, t, w); smooth.line(batch, cx, cy - a * 0.6f, cx + a, cy + a * 0.4f, t, w) }
+                'L' -> { smooth.line(batch, cx + a * 0.4f, cy - a, cx - a * 0.6f, cy, t, w); smooth.line(batch, cx - a * 0.6f, cy, cx + a * 0.4f, cy + a, t, w) }
+                else -> { smooth.line(batch, cx - a * 0.4f, cy - a, cx + a * 0.6f, cy, t, w); smooth.line(batch, cx + a * 0.6f, cy, cx - a * 0.4f, cy + a, t, w) }
+            }
+        }
+
         override fun draw() {
             shapes.begin(ShapeRenderer.ShapeType.Filled)
             drawDimAndPanel()
-            (0..1).forEach { j -> val r = optRect(j); shapes.color = cOpen; shapes.rect(r[0], r[1], r[2], r[3]) }
+            for (r in 0 until rows) for (c in 0 until cols) {
+                val lit = key(r, c) in seen
+                shapes.color = when {
+                    !lit -> Color(0.07f, 0.07f, 0.12f, 1f)
+                    v.grid[r][c] == '#' -> Color(0.30f, 0.32f, 0.40f, 1f)
+                    else -> cOpen
+                }
+                shapes.rect(cellX(c) + 1f, cellY(r) + 1f, cell - 2f, cell - 2f)
+            }
             shapes.end()
 
             batch.begin()
+            if (key(gr, gc) in seen) smooth.circle(batch, cellX(gc) + cell / 2f, cellY(gr) + cell / 2f, cell * 0.32f, cGood)
+            smooth.circle(batch, cellX(pc) + cell / 2f, cellY(pr) + cell / 2f, cell * 0.34f, cAccent)
+            smooth.circle(batch, cellX(pc) + cell / 2f, cellY(pr) + cell / 2f, cell * 0.15f, Color.WHITE)
+
+            // Virtual D-pad — round buttons with white chevrons.
+            drawPadButton(padCx, padCy + padGap, 'U')
+            drawPadButton(padCx, padCy - padGap, 'D')
+            drawPadButton(padCx - padGap, padCy, 'L')
+            drawPadButton(padCx + padGap, padCy, 'R')
+
             font.color = cInk
-            centerText("Honesty Core", W / 2f, 650f, 1.2f)
-            centerText("Fork ${at + 1} of ${forks.size} — pick the truth", W / 2f, 600f, 0.78f)
-            val fork = forks[at.coerceAtMost(forks.size - 1)]
-            (0..1).forEach { j ->
-                val r = optRect(j)
-                font.color = cInk
-                wrapText(if (order[j] == 0) fork.first else fork.second, r[0] + r[2] / 2f, r[1] + r[3] / 2f + 18f, r[2] - 40f, 0.78f)
+            centerText("Honesty Core Charger", W / 2f, 652f, 1.2f)
+            centerText("Use the arrows to reach the heart", W / 2f, 626f, 0.62f)
+            val sign = v.signs.firstOrNull { it.r == pr && it.c == pc }
+            val sx = if (landscapePanel) padCx else W / 2f
+            val sy = if (landscapePanel) 600f else 336f
+            val sw = if (landscapePanel) 300f else W - 64f
+            when {
+                done -> { font.color = cGood; wrapText("You charged the core the honest way!", sx, sy, sw, 0.64f) }
+                sign != null -> { font.color = cAccent; wrapText(sign.text, sx, sy, sw, 0.58f) }
             }
-            if (wrongFlash > 0f) { font.color = Color(0.96f, 0.34f, 0.34f, 1f); centerText("Dead end! Start over.", W / 2f, 150f, 0.95f) }
             drawBackLabel()
             batch.end()
         }
     }
 
+    // Honesty maze pool — ported from the web app's HONESTY_MAZES (signs reworded
+    // to plain words). MazePuzzle picks one at random each time it's opened.
+    private val honestyMazes = listOf(
+        MazeVariant(
+            listOf("###########", "#S....#...#", "#####.###.#", "#...#.....#", "#.#.#####.#", "#G#...#...#", "###.###.###", "#...#...#.#", "#.###.###.#", "#.........#", "###########"),
+            listOf(
+                MazeSign(3, 9, "You forgot your homework. Up: 'Pretend you lost it' (a lie). Down: 'Tell the teacher the truth'."),
+                MazeSign(9, 5, "You knocked over a plant. Right: 'Blame the cat' (a lie). Left: 'Own up and help clean it'."),
+                MazeSign(5, 3, "You found a lost pen. Right: 'Keep it secretly' (a lie). Up: 'Give it back honestly'."),
+            ),
+        ),
+        MazeVariant(
+            listOf("###########", "#S#.......#", "#.###.###.#", "#...#.#G..#", "###.#.#####", "#...#.....#", "#.###.###.#", "#.#...#...#", "#.#####.#.#", "#.......#.#", "###########"),
+            listOf(
+                MazeSign(7, 9, "You knocked over a plant. Down: 'Blame the cat' (a lie). Up: 'Own up and help clean it'."),
+                MazeSign(5, 5, "You found a lost pen. Down: 'Keep it secretly' (a lie). Up: 'Give it back honestly'."),
+                MazeSign(1, 5, "You broke a toy at a friend's house. Left: 'Hide it under the sofa' (a lie). Right: 'Tell them it was an accident'."),
+            ),
+        ),
+        MazeVariant(
+            listOf("###########", "#S#.....#G#", "#.#.###.#.#", "#.#...#...#", "#.#.#.#####", "#.#.#.....#", "#.#####.#.#", "#.....#.#.#", "#####.###.#", "#.........#", "###########"),
+            listOf(
+                MazeSign(9, 5, "You found a lost pen. Left: 'Keep it secretly' (a lie). Right: 'Give it back honestly'."),
+                MazeSign(5, 7, "You broke a toy at a friend's house. Down: 'Hide it under the sofa' (a lie). Left: 'Tell them it was an accident'."),
+                MazeSign(3, 3, "You scored extra points by mistake. Down: 'Keep the wrong score' (a lie). Up: 'Point out the error'."),
+            ),
+        ),
+        MazeVariant(
+            listOf("###########", "#S..#.....#", "###.#.###.#", "#G#.#...#.#", "#.#.#####.#", "#.#.......#", "#.#######.#", "#...#.....#", "#.###.#####", "#.........#", "###########"),
+            listOf(
+                MazeSign(5, 9, "You broke a toy at a friend's house. Up: 'Hide it under the sofa' (a lie). Down: 'Tell them it was an accident'."),
+                MazeSign(9, 5, "You scored extra points by mistake. Right: 'Keep the wrong score' (a lie). Left: 'Point out the error'."),
+                MazeSign(7, 1, "You forgot your homework. Right: 'Pretend you lost it' (a lie). Up: 'Tell the teacher the truth'."),
+            ),
+        ),
+        MazeVariant(
+            listOf("###########", "#S......#.#", "#######.#.#", "#G....#...#", "#####.###.#", "#.....#...#", "#.###.#.###", "#...#.#.#.#", "#.#.###.#.#", "#.#.......#", "###########"),
+            listOf(
+                MazeSign(9, 7, "You scored extra points by mistake. Right: 'Keep the wrong score' (a lie). Left: 'Point out the error'."),
+                MazeSign(7, 1, "You forgot your homework. Down: 'Pretend you lost it' (a lie). Up: 'Tell the teacher the truth'."),
+                MazeSign(5, 5, "You knocked over a plant. Down: 'Blame the cat' (a lie). Up: 'Own up and help clean it'."),
+            ),
+        ),
+        MazeVariant(
+            listOf("###########", "#S..#.....#", "###.###.#.#", "#G#.....#.#", "#.#######.#", "#...#.....#", "#.###.#####", "#...#...#.#", "#.#.###.#.#", "#.#.......#", "###########"),
+            listOf(
+                MazeSign(9, 7, "You forgot your homework. Right: 'Pretend you lost it' (a lie). Left: 'Tell the teacher the truth'."),
+                MazeSign(7, 1, "You knocked over a plant. Down: 'Blame the cat' (a lie). Up: 'Own up and help clean it'."),
+                MazeSign(5, 1, "You found a lost pen. Right: 'Keep it secretly' (a lie). Up: 'Give it back honestly'."),
+            ),
+        ),
+    )
+
     /* --- The Suit: unscramble the three power words ------------------- */
 
     private inner class Unscramble(
-        private val words: List<String>, // solved in order
+        private val words: List<String>,        // solved in order
+        private val heading: String = "The Hero Suit",
+        private val hints: List<String> = emptyList(), // optional clue per word (parallel to [words])
     ) : Puzzle() {
         override val instruction = "Unscramble the words"
         private var wi = 0
@@ -882,6 +1202,10 @@ class EscapeGdxGame(
         private var scrambled = charArrayOf()
         private val usedTiles = HashSet<Int>()
         private var done = false
+
+        // Once the last word is solved `wi` runs one past the end; the puzzle stays
+        // open for review, so rendering must clamp back to the final word.
+        private val wiSafe get() = wi.coerceAtMost(words.size - 1)
 
         override fun onOpen() { wi = 0; done = false; loadWord() }
 
@@ -892,7 +1216,7 @@ class EscapeGdxGame(
         }
 
         private fun slotRect(i: Int): FloatArray {
-            val n = words[wi].length
+            val n = words[wiSafe].length
             return floatArrayOf((W - n * 56f) / 2f + i * 56f, 430f, 48f, 48f)
         }
         private fun tileRect(i: Int): FloatArray {
@@ -908,15 +1232,16 @@ class EscapeGdxGame(
                 if (idx != null) usedTiles.remove(idx)
                 return
             }
-            scrambled.indices.forEach { i ->
-                if (i !in usedTiles && inRect(p, tileRect(i)) && typed.length < words[wi].length) {
-                    typed.append(scrambled[i]); usedTiles.add(i)
-                    if (typed.length == words[wi].length) {
-                        if (typed.toString() == words[wi]) {
-                            wi++; if (wi >= words.size) done = true else loadWord()
-                        } else { wrongFlash = 1f; typed.setLength(0); usedTiles.clear() }
-                    }
-                }
+            // Resolve the tapped tile *before* touching state — completing a word
+            // calls loadWord(), which swaps `scrambled` for a different-length array;
+            // iterating it while mutating would read past the new word's bounds.
+            val tile = scrambled.indices.firstOrNull { it !in usedTiles && inRect(p, tileRect(it)) } ?: return
+            if (typed.length >= words[wi].length) return
+            typed.append(scrambled[tile]); usedTiles.add(tile)
+            if (typed.length == words[wi].length) {
+                if (typed.toString() == words[wi]) {
+                    wi++; if (wi >= words.size) done = true else loadWord()
+                } else { wrongFlash = 1f; typed.setLength(0); usedTiles.clear() }
             }
         }
 
@@ -925,9 +1250,9 @@ class EscapeGdxGame(
         override fun draw() {
             shapes.begin(ShapeRenderer.ShapeType.Filled)
             drawDimAndPanel()
-            for (i in words[wi].indices) {
+            for (i in words[wiSafe].indices) {
                 val r = slotRect(i)
-                shapes.color = if (i < typed.length) Color(0.72f, 0.74f, 0.84f, 1f) else cSlot
+                shapes.color = if (done || i < typed.length) Color(0.72f, 0.74f, 0.84f, 1f) else cSlot
                 shapes.rect(r[0], r[1], r[2], r[3])
             }
             scrambled.indices.forEach { i ->
@@ -937,8 +1262,11 @@ class EscapeGdxGame(
 
             batch.begin()
             font.color = cInk
-            centerText("The Hero Suit", W / 2f, 650f, 1.2f)
-            centerText("Word ${wi + 1} of ${words.size} — tap the letters in order", W / 2f, 560f, 0.78f)
+            centerText(heading, W / 2f, 650f, 1.2f)
+            centerText("Word ${wiSafe + 1} of ${words.size}", W / 2f, 600f, 0.72f)
+            val hint = hints.getOrNull(wiSafe)
+            if (hint != null) { font.color = cAccent; wrapText("Clue: $hint", W / 2f, 572f, W - 90f, 0.74f) }
+            else { font.color = cInk; centerText("Tap the letters in order", W / 2f, 560f, 0.78f) }
             typed.forEachIndexed { i, ch -> val r = slotRect(i); font.color = cInk; centerText(ch.toString(), r[0] + r[2] / 2f, r[1] + r[3] / 2f, 1.2f) }
             scrambled.indices.forEach { i ->
                 if (i !in usedTiles) { val r = tileRect(i); font.color = Color.WHITE; centerText(scrambled[i].toString(), r[0] + r[2] / 2f, r[1] + r[3] / 2f, 1.2f) }
@@ -1127,6 +1455,19 @@ class EscapeGdxGame(
         val cores: List<String> = emptyList(),
         val coreRoom: String? = null,
         val suitRoom: String? = null,
+        /** Direct-delivery levels (e.g. the Heritage Vault): each carried item sits in
+         *  its own (solved) room and is placed straight into the suit/display — there
+         *  is no separate charging step the way the Tower's cores have. */
+        val directDeliver: Boolean = false,
+        /** Recycling chain (green-lab): bottle ids scattered across [bottleHomeRooms]
+         *  (parallel list), washed at the sink in [sinkRoom], then deposited at
+         *  [depositRoom]'s recycling station. [bottleGateRoom]'s puzzle stays locked
+         *  until every bottle has been recycled. */
+        val bottles: List<String> = emptyList(),
+        val bottleHomeRooms: List<String> = emptyList(),
+        val sinkRoom: String? = null,
+        val depositRoom: String? = null,
+        val bottleGateRoom: String? = null,
     )
 
     // A clue drop (parchment placeholder for now) that will explain the trick.
@@ -1146,7 +1487,7 @@ class EscapeGdxGame(
             GridRoom("panel", "Control Panel", "Control Panel", floorColor(4), Color(0.20f, 0.62f, 0.98f, 1f), gx = 1, gy = 0,
                 puzzle = NumberLock("6", "Control Panel", "Count the robots", icons = ROBOT_FIELD), clue = "Display: ROBOT"),
             GridRoom("keypad", "Exit Chamber", "Exit Keypad", floorColor(5), cGood, gx = 2, gy = 0,
-                puzzle = NumberLock("45", "Exit Keypad", "Enter the door code", showClues = false), requires = "poster"),
+                puzzle = NumberLock("54", "Exit Keypad", "Enter the door code\nIt requires 2 numbers!", showClues = false), requires = "poster"),
             GridRoom("atrium", "Main Lab", null, floorColor(1), gx = 0, gy = 1, gw = 2),            // wide hub (2x1)
             GridRoom("poster", "Word Display", "Word Display", floorColor(2), cGood, gx = 2, gy = 1, gh = 2,  // tall (1x2)
                 puzzle = WordSearch(
@@ -1156,7 +1497,7 @@ class EscapeGdxGame(
                     4, 3,
                 )),
             GridRoom("decoder", "Symbol Decoder", "Symbol Decoder", floorColor(3), Color(0.66f, 0.48f, 0.92f, 1f), gx = 0, gy = 2,
-                puzzle = Cipher(listOf('G', 'E', 'A', 'R', 'S', 'T', 'N', 'O'), listOf(0, 1, 2, 3), "GEAR"), clue = "Display: GEAR"),
+                puzzle = Cipher(listOf('G', 'E', 'A', 'R', 'S', 'T', 'N', 'O'), "GEAR"), clue = "Display: GEAR"),
             GridRoom("robot", "Robot Helper", "Robot Helper", floorColor(4), Color(1f, 0.58f, 0.20f, 1f), gx = 1, gy = 2,
                 puzzle = Order(listOf("Show the robot lots of cat photos", "The robot spots the pattern", "The robot guesses 'cat!' on a new photo")), clue = "Display: LEARN"),
         ),
@@ -1165,21 +1506,29 @@ class EscapeGdxGame(
             "atrium" to "decoder", "atrium" to "robot", "atrium" to "poster",
             "panel" to "keypad", "poster" to "keypad",
         ),
-        spawnRoom = "entrance", exitRoom = "keypad", clueRoom = "entrance",
+        spawnRoom = "entrance", exitRoom = "keypad", clueRoom = "atrium",
     )
 
-    // ---- Levels 1-4: empty layouts (no puzzles yet) with varied shapes ----
+    // ---- The Vault: a Singapore-history "Heritage Vault". Each gallery hides an
+    // artefact behind a history puzzle; recover all three and carry them into the
+    // central Time Capsule to complete the national display and open the vault. ----
     private val vault = EscapeLevel(
         name = "The Vault", gridCols = 3, gridRows = 3,
         rooms = listOf(
-            GridRoom("hall", "Hall", null, floorColor(0), gx = 0, gy = 0, gw = 3, gh = 1),  // wide
-            GridRoom("west", "West Wing", null, floorColor(1), gx = 0, gy = 1, gh = 2),       // tall 1x2
-            GridRoom("core", "Core", null, floorColor(2), gx = 1, gy = 1),
-            GridRoom("east", "East Wing", null, floorColor(3), gx = 2, gy = 1, gh = 2),       // tall 1x2
-            GridRoom("top", "Top Vault", null, floorColor(4), gx = 1, gy = 2),
+            GridRoom("hall", "Heritage Hall", null, floorColor(0), gx = 0, gy = 0, gw = 3, gh = 1),  // wide entrance
+            GridRoom("west", "Founding Gallery", "Founding Gallery", floorColor(1), Color(0.30f, 0.62f, 0.95f, 1f), gx = 0, gy = 1, gh = 2, // 1819 — holds the Treaty scroll
+                puzzle = Mcq("Founding Gallery", "In which year did Raffles land and found modern Singapore?",
+                    listOf("1819", "1942", "1965"))),
+            GridRoom("core", "Time Capsule", "Time Capsule", floorColor(2), cGood, gx = 1, gy = 1),    // the display / exit
+            GridRoom("east", "Independence Hall", "Independence Hall", floorColor(3), Color(0.95f, 0.34f, 0.34f, 1f), gx = 2, gy = 1, gh = 2, // 1965 — holds the National Flag
+                puzzle = NumberLock("1965", "Independence Hall", "Key in the year Singapore became independent")),
+            GridRoom("top", "Lion City Room", "Lion City Room", floorColor(4), Color(0.95f, 0.80f, 0.22f, 1f), gx = 1, gy = 2, // holds the Merlion
+                puzzle = Unscramble(listOf("SINGA", "PURA"), "Lion City Room",
+                    listOf("In Malay, the word for 'lion'.", "In Malay, this means 'city' — put it after Singa for Singapore's old name."))),
         ),
-        doors = setOf("hall" to "west", "hall" to "east", "west" to "core", "core" to "top"),
-        spawnRoom = "hall", exitRoom = "east",
+        doors = setOf("hall" to "west", "hall" to "east", "west" to "core", "east" to "core", "core" to "top"),
+        spawnRoom = "hall", exitRoom = "core",
+        cores = listOf("west", "east", "top"), suitRoom = "core", directDeliver = true,
     )
     // The Tower hosts kindness-castle ("The Superhero Suit") with a core-carrying
     // twist: solve each Core station, then ferry its (unlabeled) core from the
@@ -1190,11 +1539,7 @@ class EscapeGdxGame(
         rooms = listOf(
             GridRoom("foyer", "Foyer", null, floorColor(0), gx = 0, gy = 0, gw = 2),          // wide
             GridRoom("honesty", "Core Charger", "Core Charger", floorColor(1), Color(0.30f, 0.60f, 0.95f, 1f), gx = 0, gy = 1,
-                puzzle = Maze(listOf(
-                    "I broke the vase — I'll tell the truth." to "I'll hide it and blame the cat.",
-                    "I found a lost wallet — I'll hand it in." to "Finders keepers — I'll keep it.",
-                    "I forgot my homework — I'll own up." to "I'll say my dog ate it.",
-                ))),
+                puzzle = Maze(honestyMazes)),
             GridRoom("fairness", "Core Charger", "Core Charger", floorColor(2), Color(0.98f, 0.80f, 0.25f, 1f), gx = 1, gy = 1,
                 puzzle = Fair(listOf(0, 2, 4), 9)),
             GridRoom("landing", "Landing", null, floorColor(3), gx = 0, gy = 2, gw = 2),       // wide — cores + note
@@ -1233,17 +1578,23 @@ class EscapeGdxGame(
             GridRoom("circuit", "Power Circuit", "Power Circuit", floorColor(4), Color(0.30f, 0.66f, 0.95f, 1f), gx = 1, gy = 1,
                 puzzle = Circuit(), clue = "Power flows"),
             GridRoom("loft", "Exit Decoder", "Exit Decoder", floorColor(5), cGood, gx = 1, gy = 2,
-                puzzle = Cipher(listOf('P', 'O', 'W', 'E', 'R', 'S', 'U', 'N'), listOf(0, 1, 2, 3, 4), "POWER"),
+                puzzle = Cipher(listOf('P', 'O', 'W', 'E', 'R', 'S', 'U', 'N'), "POWER"),
                 requiresAll = listOf("panel", "bins", "circuit")),
             // grid units (2,1) and (2,2) are left void -> the map is an L.
         ),
         doors = setOf("lobby" to "panel", "lobby" to "bins", "bins" to "circuit", "circuit" to "loft"),
-        spawnRoom = "lobby", exitRoom = "loft", clueRoom = "lobby",
+        spawnRoom = "lobby", exitRoom = "loft",
+        // Find 3 bottles scattered in the lobby/panel/plant, wash each at the sink in
+        // the Recycling Plant corner, then recycle them at the plant station to power
+        // up the Power Circuit room.
+        bottles = listOf("bottleA", "bottleB", "bottleC"),
+        bottleHomeRooms = listOf("lobby", "panel", "bins"),
+        sinkRoom = "bins", depositRoom = "bins", bottleGateRoom = "circuit",
     )
     // The Big Hall — "Lion City": a hub-and-spoke SG-culture room. Spawn in the
-    // Grand Hall (with a numbered map note), solve the four themed rooms (each
-    // reveals a word), then drag the words into the crossword — a secret word
-    // (LION) reads down. The exit asks you to spell it back in symbols.
+    // Grand Hall, solve the four themed rooms (each reveals a word), then drag the
+    // words into the crossword — a secret word (LION) reads down. The exit asks you
+    // to spell it back in symbols.
     private val bigHall = EscapeLevel(
         name = "The Big Hall", gridCols = 3, gridRows = 3,                                        // + shape (3 voids)
         rooms = listOf(
@@ -1254,16 +1605,19 @@ class EscapeGdxGame(
                 ),
                 requiresAll = listOf("food", "festival", "flower", "fruit")),
             GridRoom("food", "Hawker Stall", "Hawker Stall", floorColor(0), Color(0.95f, 0.55f, 0.20f, 1f), gx = 1, gy = 0,
-                puzzle = Mcq("Hawker Stall", "Which local dish is a spicy coconut-milk noodle soup?", listOf("Laksa", "Sushi", "Pizza")),
+                puzzle = Order(
+                    listOf("Simmer the spicy coconut-milk broth", "Add the noodles, prawns and tofu puffs", "Top with cockles and serve hot"),
+                    "Hawker Stall", "Put the laksa steps in order"),
                 clue = "1 = LAKSA"),
             GridRoom("festival", "Little India", "Little India", floorColor(1), Color(0.92f, 0.42f, 0.62f, 1f), gx = 0, gy = 1,
-                puzzle = Unscramble(listOf("DIWALI")),
+                puzzle = Unscramble(listOf("DIWALI"), "Little India",
+                    listOf("The Hindu festival of lights, with oil lamps and colourful rangoli.")),
                 clue = "2 = DIWALI"),
             GridRoom("flower", "Gardens", "Gardens", floorColor(3), Color(0.66f, 0.48f, 0.92f, 1f), gx = 2, gy = 1,
                 puzzle = Mcq("Gardens", "What is Singapore's national flower?", listOf("Orchid", "Rose", "Tulip")),
                 clue = "3 = ORCHID"),
             GridRoom("fruit", "Fruit Stall", "Fruit Stall", floorColor(4), Color(0.30f, 0.78f, 0.45f, 1f), gx = 1, gy = 2,
-                puzzle = Mcq("Fruit Stall", "Which thorny fruit is the 'King of Fruits'?", listOf("Durian", "Apple", "Grape")),
+                puzzle = Cipher(listOf('D', 'U', 'R', 'I', 'A', 'N'), "DURIAN"),
                 clue = "4 = DURIAN"),
             GridRoom("exit", "Exit Gate", "Exit Gate", floorColor(5), cGood, gx = 2, gy = 2,
                 puzzle = SymbolLock("LION", mapOf('L' to 0, 'I' to 1, 'O' to 2, 'N' to 3)),
@@ -1273,7 +1627,7 @@ class EscapeGdxGame(
         doors = setOf(
             "hall" to "food", "hall" to "festival", "hall" to "flower", "hall" to "fruit", "flower" to "exit",
         ),
-        spawnRoom = "hall", exitRoom = "exit", clueRoom = "hall",
+        spawnRoom = "hall", exitRoom = "exit",
     )
 
     // Ordered to match ESCAPE_COOP_SLUGS so each level co-op-routes to the server
@@ -1304,6 +1658,20 @@ class EscapeGdxGame(
     private val coreTmp = Vector2()
     // A charged core glows in its charger's identity colour (so the two match).
     private fun coreColor(id: String) = rooms.firstOrNull { it.id == id }?.nodeColor ?: Color(0.72f, 0.72f, 0.82f, 1f)
+
+    // ---- recycling-bottle mechanic (green-lab) ----
+    private val bottleWashed = HashSet<String>()    // washed (clean) but set down, not yet recycled
+    private val bottleDeposited = HashSet<String>() // recycled at the plant
+    private var carryingBottle: String? = null
+    private var carriedClean = false                // is the carried bottle washed
+    private var sinkRoomIndex = -1
+    private var depositRoomIndex = -1
+    private val sinkPos = Vector2()
+    private val depositPos = Vector2() // the recycler — kept in its own corner, clear of the plant station
+    private val bottleHome = HashMap<String, Vector2>() // scatter spot per bottle
+    private val bottleDrop = HashMap<String, Vector2>() // where a bottle was set down
+    private val bottleTmp = Vector2()
+    private val bottlesDone get() = currentLevel.bottles.isNotEmpty() && bottleDeposited.size >= currentLevel.bottles.size
 
     private val wallColor = Color(0.12f, 0.13f, 0.22f, 1f)
 
@@ -1360,12 +1728,31 @@ class EscapeGdxGame(
         coreRoomIndex = level.coreRoom?.let { id -> level.rooms.indexOfFirst { it.id == id } } ?: -1
         suitRoomIndex = level.suitRoom?.let { id -> level.rooms.indexOfFirst { it.id == id } } ?: -1
         coreHome.clear()
-        if (coreRoomIndex >= 0) {
+        if (level.directDeliver) {
+            // Each artefact rests in its own gallery (off to one side of the machine).
+            level.cores.forEach { id ->
+                val si = level.rooms.indexOfFirst { it.id == id }
+                if (si >= 0) { val rc = cells[si]; coreHome[id] = Vector2(rc.x + rc.w * 0.3f, rc.y + rc.h * 0.3f) }
+            }
+        } else if (coreRoomIndex >= 0) {
             val cc = cells[coreRoomIndex]
             level.cores.forEachIndexed { i, id -> coreHome[id] = Vector2(cc.x + cc.w * (0.16f + 0.15f * i), cc.y + cc.h * 0.42f) }
             if (clueRoomIndex == coreRoomIndex) cluePos.set(cc.x + cc.w * 0.84f, cc.y + cc.h * 0.55f) // note on the far side
         }
         if (suitRoomIndex >= 0) suitPos.set(stationPos[suitRoomIndex])
+
+        // Recycling-bottle setup: the sink in a corner of its room, bottles scattered
+        // across their home rooms (kept clear of the sink/station in the plant room).
+        sinkRoomIndex = level.sinkRoom?.let { id -> level.rooms.indexOfFirst { it.id == id } } ?: -1
+        depositRoomIndex = level.depositRoom?.let { id -> level.rooms.indexOfFirst { it.id == id } } ?: -1
+        if (sinkRoomIndex >= 0) { val sc = cells[sinkRoomIndex]; sinkPos.set(sc.x + sc.w * 0.26f, sc.y + sc.h * 0.84f) }
+        // The recycler sits in the opposite corner from the centre plant station so the two don't overlap.
+        if (depositRoomIndex >= 0) { val dc = cells[depositRoomIndex]; depositPos.set(dc.x + dc.w * 0.76f, dc.y + dc.h * 0.82f) }
+        bottleHome.clear()
+        level.bottles.forEachIndexed { i, id ->
+            val ri = level.rooms.indexOfFirst { it.id == (level.bottleHomeRooms.getOrNull(i) ?: level.spawnRoom) }
+            if (ri >= 0) { val rc = cells[ri]; bottleHome[id] = Vector2(rc.x + rc.w * 0.5f, rc.y + rc.h * (if (ri == sinkRoomIndex) 0.2f else 0.45f)) }
+        }
 
         walls = buildLevelWalls(level, cw, ch)
     }
@@ -1466,6 +1853,7 @@ class EscapeGdxGame(
         id in delivered -> suitRoomIndex
         coreDrop.containsKey(id) -> roomIndexAt(coreDrop[id]!!)
         id in charged -> stationIndexOf(id)
+        currentLevel.directDeliver -> stationIndexOf(id) // the artefact's own gallery
         else -> coreRoomIndex
     }
     private fun corePos(id: String): Vector2 = when {
@@ -1480,6 +1868,7 @@ class EscapeGdxGame(
         if (carrying != null) return null
         for (id in currentLevel.cores) {
             if (id in delivered) continue
+            if (currentLevel.directDeliver && id !in solved) continue // artefact stays sealed until its gallery is solved
             if (coreRoomOf(id) == currentRoomIndex() && dst(pos.x, pos.y, corePos(id).x, corePos(id).y) < 60f) return id
         }
         return null
@@ -1490,6 +1879,33 @@ class EscapeGdxGame(
     }
     private fun nearSuit(): Boolean =
         suitRoomIndex >= 0 && currentRoomIndex() == suitRoomIndex && dst(pos.x, pos.y, suitPos.x, suitPos.y) < 80f
+
+    /* ---- recycling-bottle helpers ---- */
+    private fun bottleRoomOf(id: String): Int = when {
+        id == carryingBottle -> currentRoomIndex()
+        id in bottleDeposited -> depositRoomIndex
+        bottleDrop.containsKey(id) -> roomIndexAt(bottleDrop[id]!!)
+        else -> bottleHome[id]?.let { roomIndexAt(it) } ?: -1
+    }
+    private fun bottlePos(id: String): Vector2 = when {
+        id == carryingBottle -> bottleTmp.set(pos.x, pos.y + CHAR_R + 18f)
+        id in bottleDeposited -> bottleTmp.set(depositPos.x + (currentLevel.bottles.indexOf(id) - 1) * 26f, depositPos.y - 26f)
+        bottleDrop.containsKey(id) -> bottleTmp.set(bottleDrop[id]!!)
+        else -> bottleHome[id]?.let { bottleTmp.set(it) } ?: bottleTmp.set(0f, 0f)
+    }
+    /** A bottle the player can pick up right now (loose in the room they're standing in). */
+    private fun pickableBottle(): String? {
+        if (carryingBottle != null) return null
+        for (id in currentLevel.bottles) {
+            if (id in bottleDeposited) continue
+            if (bottleRoomOf(id) == currentRoomIndex() && dst(pos.x, pos.y, bottlePos(id).x, bottlePos(id).y) < 60f) return id
+        }
+        return null
+    }
+    private fun nearSink(): Boolean =
+        sinkRoomIndex >= 0 && currentRoomIndex() == sinkRoomIndex && dst(pos.x, pos.y, sinkPos.x, sinkPos.y) < 72f
+    private fun nearDeposit(): Boolean =
+        depositRoomIndex >= 0 && currentRoomIndex() == depositRoomIndex && dst(pos.x, pos.y, depositPos.x, depositPos.y) < 70f
 
     private enum class Phase { PLAYING, PUZZLE, WON }
 
@@ -1523,6 +1939,7 @@ class EscapeGdxGame(
     private var puzzleHadMistake = false
     // The open puzzle is solved and now in (locked) review mode until the X is tapped.
     private var puzzleSolved = false
+    private var justSolved = false // true only on a fresh solve, so the banner doesn't replay on review re-open
     private var solvedTime = 0f // seconds the "Solved!" banner has been showing
     private val touch = Vector2()
 
@@ -1532,6 +1949,7 @@ class EscapeGdxGame(
         shapes = ShapeRenderer()
         batch = SpriteBatch()
         font = BitmapFont()
+        enrichFont(font)
         smooth = SmoothDraw()
         font.setUseIntegerPositions(false)
         loadLevel()
@@ -1539,6 +1957,47 @@ class EscapeGdxGame(
         puzzleViewport = FitViewport(W, H, puzzleCam)
         pos.set(spawnPos)
         Gdx.input.setCatchKey(com.badlogic.gdx.Input.Keys.BACK, false)
+    }
+
+    /**
+     * Teach the default (ASCII-only) [BitmapFont] a handful of non-ASCII glyphs so
+     * they stop rendering as the missing-glyph box (e.g. the em dash in "Power up
+     * the display — ...").
+     *
+     * This mirrors how TextraTypist (github.com/tommyettinger/textratypist) models
+     * a font — a BitmapFont plus extra glyphs mapped to texture regions — but is
+     * reimplemented asset-free to keep the app's "no third-party SDKs, no bundled
+     * assets" stance (the same reason [RichText] in GdxToolkit is a tiny hand-rolled
+     * stand-in, not the library). Each added glyph *reuses an existing glyph's*
+     * texture region, so no new atlas/texture is created:
+     *   • em / en dash → the hyphen bar, widened (it's a solid shape, so the region
+     *     stretches to a longer bar cleanly)
+     *   • smart quotes → their straight ASCII equivalents
+     */
+    private fun enrichFont(f: BitmapFont) {
+        val data = f.data
+        // Map [codepoint] onto an existing glyph's pixels. [widen] stretches the
+        // reused region horizontally (only sensible for solid bars like the dash);
+        // the original side bearings are preserved in the advance width.
+        fun map(codepoint: Int, from: Char, widen: Float = 1f) {
+            val src = data.getGlyph(from) ?: return
+            data.setGlyph(codepoint, BitmapFont.Glyph().apply {
+                id = codepoint
+                page = src.page
+                srcX = src.srcX; srcY = src.srcY
+                u = src.u; v = src.v; u2 = src.u2; v2 = src.v2
+                xoffset = src.xoffset; yoffset = src.yoffset
+                height = src.height
+                width = (src.width * widen).roundToInt()
+                xadvance = width + (src.xadvance - src.width) // keep the side bearing
+            })
+        }
+        map(0x2014, '-', widen = 2.8f) // — em dash
+        map(0x2013, '-', widen = 1.8f) // – en dash
+        map(0x2018, '\'')              // ' left single quote
+        map(0x2019, '\'')              // ' right single quote / curly apostrophe
+        map(0x201C, '"')               // " left double quote
+        map(0x201D, '"')               // " right double quote
     }
 
     /* ----------------------------- helpers ----------------------------- */
@@ -1582,6 +2041,8 @@ class EscapeGdxGame(
         val r = rooms[i]
         // The suit's final puzzle stays locked until every core has been delivered.
         if (currentLevel.suitRoom == r.id && delivered.size < currentLevel.cores.size) return true
+        // The bottle-gated room (Power Circuit) stays locked until every bottle is recycled.
+        if (currentLevel.bottleGateRoom == r.id && !bottlesDone) return true
         if (r.requires != null && r.requires !in solved) return true
         return r.requiresAll.any { it !in solved }
     }
@@ -1621,6 +2082,77 @@ class EscapeGdxGame(
         smooth.rect(batch, cx - s, cy - s, 2 * s, 2 * s, teal)
         smooth.circle(batch, cx - s * 0.4f, cy + s * 0.1f, s * 0.22f, cInk)
         smooth.circle(batch, cx + s * 0.4f, cy + s * 0.1f, s * 0.22f, cInk)
+    }
+
+    private val animalColors = arrayOf(
+        Color(0.96f, 0.66f, 0.30f, 1f), // cat — ginger
+        Color(0.62f, 0.46f, 0.34f, 1f), // dog — brown
+        Color(0.95f, 0.95f, 0.97f, 1f), // rabbit — white
+        Color(0.52f, 0.38f, 0.28f, 1f), // bear — dark brown
+        Color(0.42f, 0.78f, 0.46f, 1f), // frog — green
+        Color(0.74f, 0.74f, 0.80f, 1f), // mouse — grey
+    )
+
+    /** A friendly animal-face pictogram (anti-aliased, via [batch]) — a recognisable
+     *  stand-in for the source's emoji animals in the sharing puzzle. [s] is the face
+     *  radius. Differentiated mostly by ear shape so each critter reads at a glance. */
+    private fun drawAnimal(kind: Int, cx: Float, cy: Float, s: Float) {
+        val body = animalColors[kind % animalColors.size]
+        val ink = cInk
+        fun face() = smooth.circle(batch, cx, cy, s, body)
+        fun eyes(dy: Float = 0.12f) {
+            smooth.circle(batch, cx - s * 0.34f, cy + s * dy, s * 0.12f, ink)
+            smooth.circle(batch, cx + s * 0.34f, cy + s * dy, s * 0.12f, ink)
+        }
+        fun nose() = smooth.circle(batch, cx, cy - s * 0.2f, s * 0.13f, ink)
+        when (kind % 6) {
+            0 -> { // cat — pointy ears + whiskers
+                smooth.triangle(batch, cx - s * 0.95f, cy + s * 0.3f, s * 0.7f, s * 0.85f, body)
+                smooth.triangle(batch, cx + s * 0.25f, cy + s * 0.3f, s * 0.7f, s * 0.85f, body)
+                face(); eyes(); nose()
+                smooth.line(batch, cx - s * 0.25f, cy - s * 0.18f, cx - s * 0.9f, cy - s * 0.08f, 2f, ink)
+                smooth.line(batch, cx + s * 0.25f, cy - s * 0.18f, cx + s * 0.9f, cy - s * 0.08f, 2f, ink)
+            }
+            1 -> { // dog — floppy round ears at the sides
+                smooth.circle(batch, cx - s * 0.85f, cy + s * 0.15f, s * 0.42f, body)
+                smooth.circle(batch, cx + s * 0.85f, cy + s * 0.15f, s * 0.42f, body)
+                face(); eyes(); nose()
+            }
+            2 -> { // rabbit — tall upright ears
+                smooth.line(batch, cx - s * 0.38f, cy + s * 0.5f, cx - s * 0.42f, cy + s * 1.7f, s * 0.34f, body)
+                smooth.line(batch, cx + s * 0.38f, cy + s * 0.5f, cx + s * 0.42f, cy + s * 1.7f, s * 0.34f, body)
+                face(); eyes(); nose()
+            }
+            3 -> { // bear — small round ears on top
+                smooth.circle(batch, cx - s * 0.62f, cy + s * 0.7f, s * 0.32f, body)
+                smooth.circle(batch, cx + s * 0.62f, cy + s * 0.7f, s * 0.32f, body)
+                face(); eyes(); nose()
+            }
+            4 -> { // frog — eye bumps straddling the top, wide smile
+                smooth.circle(batch, cx - s * 0.5f, cy + s * 0.7f, s * 0.34f, body)
+                smooth.circle(batch, cx + s * 0.5f, cy + s * 0.7f, s * 0.34f, body)
+                face()
+                smooth.circle(batch, cx - s * 0.5f, cy + s * 0.78f, s * 0.14f, ink)
+                smooth.circle(batch, cx + s * 0.5f, cy + s * 0.78f, s * 0.14f, ink)
+                smooth.line(batch, cx - s * 0.45f, cy - s * 0.3f, cx + s * 0.45f, cy - s * 0.3f, 2.5f, ink)
+            }
+            else -> { // mouse — big round ears
+                smooth.circle(batch, cx - s * 0.7f, cy + s * 0.6f, s * 0.5f, body)
+                smooth.circle(batch, cx + s * 0.7f, cy + s * 0.6f, s * 0.5f, body)
+                face(); eyes(); nose()
+            }
+        }
+    }
+
+    /** A little plastic-bottle pictogram (anti-aliased, via [batch]). Dirty bottles are
+     *  a murky green-grey; a washed one is bright blue with a sparkle. [s] is the body radius. */
+    private fun drawBottle(cx: Float, cy: Float, s: Float, clean: Boolean) {
+        val body = if (clean) Color(0.42f, 0.74f, 0.96f, 1f) else Color(0.52f, 0.58f, 0.50f, 1f)
+        smooth.rect(batch, cx - s * 0.5f, cy - s, s, s * 1.5f, body)                       // body
+        smooth.circle(batch, cx, cy + s * 0.5f, s * 0.5f, body)                            // shoulder
+        smooth.rect(batch, cx - s * 0.16f, cy + s * 0.5f, s * 0.32f, s * 0.6f, body)        // neck
+        smooth.rect(batch, cx - s * 0.22f, cy + s * 1.0f, s * 0.44f, s * 0.22f, Color(0.30f, 0.40f, 0.30f, 1f)) // cap
+        if (clean) smooth.circle(batch, cx + s * 0.16f, cy - s * 0.1f, s * 0.16f, Color(1f, 1f, 1f, 0.9f))      // sparkle
     }
 
     /* ----------------------------- input ----------------------------- */
@@ -1667,7 +2199,7 @@ class EscapeGdxGame(
                 if (justUp && !puzzleSolved) pz?.onUp(unprojectTouch())
                 if (wrongFlash > 0f) puzzleHadMistake = true
                 if (pz != null && pz.complete && !puzzleSolved) {
-                    puzzleSolved = true // register the solve once, then let the player review
+                    puzzleSolved = true; justSolved = true; solvedTime = 0f // register the solve once, then let the player review
                     activeStationId?.let { id ->
                         solved.add(id)
                         // The exit-room lock (keypad / decoder) is a local gate, not a server station.
@@ -1687,13 +2219,19 @@ class EscapeGdxGame(
         if (lvl.cores.isNotEmpty()) {
             val held = carrying
             if (held != null) {
-                if (!carryingCharged && nearStation(held) && held in solved) {
-                    charged.add(held); coreDrop.remove(held); carrying = null; flashMsg = "Core charged!"; wrongFlash = 0f; return
+                if (lvl.directDeliver) {
+                    if (nearSuit()) {
+                        delivered.add(held); coreDrop.remove(held); carrying = null; flashMsg = "Artefact placed in the Time Capsule!"; wrongFlash = 0f; return
+                    }
+                } else {
+                    if (!carryingCharged && nearStation(held) && held in solved) {
+                        charged.add(held); coreDrop.remove(held); carrying = null; flashMsg = "Core charged!"; wrongFlash = 0f; return
+                    }
+                    if (carryingCharged && nearSuit()) {
+                        delivered.add(held); coreDrop.remove(held); carrying = null; flashMsg = "Core powers the suit!"; wrongFlash = 0f; return
+                    }
                 }
-                if (carryingCharged && nearSuit()) {
-                    delivered.add(held); coreDrop.remove(held); carrying = null; flashMsg = "Core powers the suit!"; wrongFlash = 0f; return
-                }
-                // Otherwise: set the core down right here so the player can swap it.
+                // Otherwise: set the item down right here so the player can swap it.
                 coreDrop[held] = Vector2(pos.x, pos.y)
                 if (carryingCharged) charged.add(held)
                 carrying = null
@@ -1703,32 +2241,56 @@ class EscapeGdxGame(
                 if (pick != null) { carrying = pick; carryingCharged = pick in charged; charged.remove(pick); coreDrop.remove(pick); return }
             }
         }
+        if (lvl.bottles.isNotEmpty()) {
+            val b = carryingBottle
+            if (b != null) {
+                if (!carriedClean && nearSink()) { carriedClean = true; flashMsg = "Bottle washed — now recycle it!"; wrongFlash = 0f; return }
+                if (carriedClean && nearDeposit()) { bottleDeposited.add(b); bottleDrop.remove(b); carryingBottle = null; flashMsg = "Bottle recycled!"; wrongFlash = 0f; return }
+                // Otherwise set the bottle down right here.
+                bottleDrop[b] = Vector2(pos.x, pos.y); if (carriedClean) bottleWashed.add(b); carryingBottle = null; return
+            } else {
+                val pick = pickableBottle()
+                if (pick != null) { carryingBottle = pick; carriedClean = pick in bottleWashed; bottleWashed.remove(pick); bottleDrop.remove(pick); return }
+            }
+        }
         val mi = activeMachine()
         if (mi != null) {
             val rd = rooms[mi]
             if (isLocked(mi)) {
-                flashMsg = if (lvl.suitRoom == rd.id && delivered.size < lvl.cores.size) "Bring all the cores to power the suit"
-                    else "Locked — solve \"${labelOf(lockedOn(mi) ?: "")}\" first"
+                flashMsg = when {
+                    lvl.suitRoom == rd.id && delivered.size < lvl.cores.size -> "Bring all the cores to power the suit"
+                    lvl.bottleGateRoom == rd.id && !bottlesDone -> "Recycle all bottles first"
+                    else -> "Locked — solve \"${labelOf(lockedOn(mi) ?: "")}\" first"
+                }
                 wrongFlash = 1.4f; return
             }
             // A solved station re-opens in review mode (no re-scramble); a fresh one resets.
             val alreadySolved = rd.id in solved
             activePuzzle = rd.puzzle; activeStationId = rd.id
             if (!alreadySolved) rd.puzzle!!.onOpen()
-            puzzleSolved = alreadySolved
+            puzzleSolved = alreadySolved; justSolved = false // a review re-open shows no banner
             wrongFlash = 0f; puzzleHadMistake = false; phase = Phase.PUZZLE; return
         }
         if (nearClue()) {
-            activePuzzle = clueNote; activeStationId = null; puzzleSolved = false; phase = Phase.PUZZLE; return
+            activePuzzle = clueNote; activeStationId = null; puzzleSolved = false; justSolved = false; phase = Phase.PUZZLE; return
         }
         if (nearExit()) {
-            if (solved.size >= totalStations) phase = Phase.WON
-            else { flashMsg = "Open the Exit Keypad first!"; wrongFlash = 1.2f }
+            if (exitUnlocked()) phase = Phase.WON
+            else {
+                flashMsg = if (currentLevel.directDeliver) "Place all the artefacts in the Time Capsule first"
+                    else "Open the Exit Keypad first!"
+                wrongFlash = 1.2f
+            }
         }
     }
 
+    /** The exit opens once every station is solved — and, on direct-delivery levels,
+     *  every carried item has been placed at the suit/display. */
+    private fun exitUnlocked() = solved.size >= totalStations &&
+        (!currentLevel.directDeliver || delivered.size >= currentLevel.cores.size)
+
     private fun closePuzzle() {
-        activePuzzle = null; activeStationId = null; phase = Phase.PLAYING; joyActive = false; wrongFlash = 0f; puzzleSolved = false
+        activePuzzle = null; activeStationId = null; phase = Phase.PLAYING; joyActive = false; wrongFlash = 0f; puzzleSolved = false; justSolved = false
     }
 
     private fun starsForWin() = if (totalStations == 0) 0 else 5
@@ -1745,14 +2307,14 @@ class EscapeGdxGame(
         }
         handleInput(dt)
         winTime = if (phase == Phase.WON) winTime + dt else 0f
-        solvedTime = if (puzzleSolved) solvedTime + dt else 0f
+        solvedTime = if (justSolved) solvedTime + dt else 0f
 
         Gdx.gl.glClearColor(0.06f, 0.06f, 0.10f, 1f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
         Gdx.gl.glEnable(GL20.GL_BLEND)
 
         when (phase) {
-            Phase.PUZZLE -> { usePuzzleCam(); activePuzzle?.draw(); if (puzzleSolved && solvedTime < 2.5f) drawSolvedBanner() }
+            Phase.PUZZLE -> { usePuzzleCam(); activePuzzle?.draw(); if (justSolved && solvedTime < 2.5f) drawSolvedBanner() }
             Phase.WON -> { usePuzzleCam(); drawWin() }
             else -> { useWorldCam(); drawScene(); drawHud() }
         }
@@ -1787,7 +2349,7 @@ class EscapeGdxGame(
         val mi = activeMachine()
         val nearEx = nearExit()
         val nearC = nearClue()
-        val exitOpen = solved.size >= totalStations
+        val exitOpen = exitUnlocked()
         // Co-op teammates standing in this room (avatar tokens, drawn below).
         val mates = coop?.state?.let { st ->
             st.players.filter { it.learnerId != st.you && it.atStation == rooms[curIdx].id }
@@ -1796,10 +2358,15 @@ class EscapeGdxGame(
         // Context action — carrying a core to charge/power takes priority over a machine.
         val held = carrying
         val actLabel = when {
-            held != null && !carryingCharged && nearStation(held) && held in solved -> "CHARGE"
-            held != null && carryingCharged && nearSuit() -> "POWER"
+            held != null && currentLevel.directDeliver && nearSuit() -> "PLACE"
+            held != null && !currentLevel.directDeliver && !carryingCharged && nearStation(held) && held in solved -> "CHARGE"
+            held != null && !currentLevel.directDeliver && carryingCharged && nearSuit() -> "POWER"
             held != null -> "DROP"
             currentLevel.cores.isNotEmpty() && pickableCore() != null -> "TAKE"
+            carryingBottle != null && !carriedClean && nearSink() -> "WASH"
+            carryingBottle != null && carriedClean && nearDeposit() -> "RECYCLE"
+            carryingBottle != null -> "DROP"
+            currentLevel.bottles.isNotEmpty() && pickableBottle() != null -> "TAKE"
             mi != null && isLocked(mi) -> "LOCK"
             mi != null && rooms[mi].id in solved -> "VIEW"
             mi != null -> "USE"
@@ -1822,6 +2389,21 @@ class EscapeGdxGame(
             shapes.color = if (exitOpen) Color(0.42f, 0.29f, 0.17f, 1f) else Color(0.4f, 0.2f, 0.2f, 1f)
             shapes.rect(exitDoor.x - 18f, exitDoor.y - 28f, 36f, 56f)
             if (nearEx) { shapes.color = Color.WHITE; shapes.rect(exitDoor.x - 22f, exitDoor.y + 28f, 44f, 4f) }
+        }
+
+        // The Time Capsule (direct-delivery display): a plinth ringed with one socket
+        // per artefact. A socket lights in the artefact's colour once it's placed; the
+        // plinth glows green when the display is complete.
+        if (currentLevel.directDeliver && curIdx == suitRoomIndex) {
+            val full = delivered.size >= currentLevel.cores.size
+            shapes.color = if (full) cGood else Color(0.46f, 0.48f, 0.56f, 1f)
+            shapes.circle(suitPos.x, suitPos.y, 34f)
+            shapes.color = wallColor
+            shapes.circle(suitPos.x, suitPos.y, 19f)
+            currentLevel.cores.forEachIndexed { i, id ->
+                shapes.color = if (id in delivered) coreColor(id) else Color(0.28f, 0.29f, 0.35f, 1f)
+                shapes.circle(suitPos.x + (i - 1) * 34f, suitPos.y - 34f, 9f)
+            }
         }
 
         // Only the current room's machine is drawn (others are hidden anyway).
@@ -1866,12 +2448,34 @@ class EscapeGdxGame(
         currentLevel.cores.forEach { id ->
             if (id == carrying || coreRoomOf(id) == curIdx) {
                 val cp = corePos(id)
-                // Cores stay an anonymous grey until charged — only then do they
-                // glow and reveal their colour (and stay lit while carried).
-                val live = id in charged || id in delivered || (id == carrying && carryingCharged)
+                // Items stay an anonymous grey until they are "live": Tower cores
+                // when charged; Vault artefacts the moment their gallery is solved.
+                val live = id in delivered || (if (currentLevel.directDeliver) id in solved
+                    else id in charged || (id == carrying && carryingCharged))
                 if (live) smooth.circle(batch, cp.x, cp.y, 18f, Color(1f, 1f, 1f, 0.45f))
                 smooth.circle(batch, cp.x, cp.y, 13f, if (live) coreColor(id) else Color(0.60f, 0.62f, 0.70f, 1f))
                 smooth.circle(batch, cp.x, cp.y, 5f, Color(1f, 1f, 1f, 0.9f))
+            }
+        }
+        // Recycling chain (green-lab): the sink, the recycle bin, and the bottles.
+        if (currentLevel.bottles.isNotEmpty()) {
+            if (curIdx == sinkRoomIndex) { // a little wash basin with a tap
+                smooth.rect(batch, sinkPos.x - 26f, sinkPos.y - 14f, 52f, 22f, Color(0.66f, 0.70f, 0.78f, 1f))
+                smooth.rect(batch, sinkPos.x - 21f, sinkPos.y - 10f, 42f, 12f, Color(0.40f, 0.56f, 0.66f, 1f))
+                smooth.line(batch, sinkPos.x + 16f, sinkPos.y + 8f, sinkPos.x + 16f, sinkPos.y + 26f, 5f, Color(0.56f, 0.59f, 0.67f, 1f))
+                smooth.line(batch, sinkPos.x + 16f, sinkPos.y + 26f, sinkPos.x + 1f, sinkPos.y + 26f, 5f, Color(0.56f, 0.59f, 0.67f, 1f))
+            }
+            if (curIdx == depositRoomIndex) { // a recycle bin beside the plant station
+                val bx = depositPos.x; val by = depositPos.y
+                smooth.rect(batch, bx - 18f, by - 18f, 36f, 34f, if (bottlesDone) cGood else Color(0.30f, 0.60f, 0.42f, 1f))
+                smooth.triangle(batch, bx - 11f, by + 16f, 22f, 11f, Color.WHITE)
+            }
+            currentLevel.bottles.forEach { id ->
+                if (id == carryingBottle || bottleRoomOf(id) == curIdx) {
+                    val bp = bottlePos(id)
+                    val clean = id in bottleDeposited || id in bottleWashed || (id == carryingBottle && carriedClean)
+                    drawBottle(bp.x, bp.y, 12f, clean)
+                }
             }
         }
         // Co-op teammate avatars (a coloured character token per player here).
@@ -1896,6 +2500,10 @@ class EscapeGdxGame(
 
         font.color = Color.WHITE
         rooms[curIdx].label?.let { centerText(it, stationPos[curIdx].x, stationPos[curIdx].y - 40f, 0.9f) }
+        if (currentLevel.bottles.isNotEmpty()) {
+            if (curIdx == sinkRoomIndex) centerText("Sink", sinkPos.x, sinkPos.y - 26f, 0.7f)
+            if (curIdx == depositRoomIndex) centerText("Recycle", depositPos.x, depositPos.y + 30f, 0.65f)
+        }
         if (clueRoomIndex >= 0 && curIdx == clueRoomIndex) centerText("Lab Note", cluePos.x, cluePos.y - 30f, 0.75f)
         if (curIdx == exitRoomIndex) centerText(if (exitOpen) "EXIT" else "LOCKED", exitDoor.x, exitDoor.y - 40f, 0.75f)
         font.color = Color.WHITE
@@ -1950,19 +2558,21 @@ class EscapeGdxGame(
     }
 
     private fun drawWin() {
+        val cardW = minOf(W - 100f, 560f) // a centred card, not a full-width banner in landscape
+        val cardX = (W - cardW) / 2f
         shapes.begin(ShapeRenderer.ShapeType.Filled)
         shapes.color = Color(0f, 0f, 0f, 0.6f)
         shapes.rect(0f, 0f, W, H)
         shapes.color = cAccent
-        val cardW = minOf(W - 100f, 560f) // a centred card, not a full-width banner in landscape
-        shapes.rect((W - cardW) / 2f, 280f, cardW, 240f)
+        shapes.rect(cardX, 280f, cardW, 240f)
         shapes.end()
 
         batch.begin()
-        // Anti-aliased confetti drifting up the celebration card (SmoothDraw).
+        // Anti-aliased confetti drifting up the celebration card (SmoothDraw) — kept
+        // within the card, not the full canvas, so it stays put in wide landscape.
         for (k in 0 until 14) {
             val seed = k * 127.1f
-            val cx = 70f + (seed * 0.73f % (W - 140f))
+            val cx = cardX + 20f + (seed * 0.73f % (cardW - 40f))
             val cy = 280f + ((seed * 1.9f + winTime * 60f) % 240f)
             val r = 4f + (k % 3)
             smooth.circle(batch, cx, cy, r, confettiColors[k % confettiColors.size])
@@ -1999,6 +2609,11 @@ class EscapeGdxGame(
         } else {
             centerText("${solved.size}/$totalStations solved", solvedPos.x, solvedPos.y, 0.9f)
         }
+        if (currentLevel.bottles.isNotEmpty()) {
+            font.color = if (bottlesDone) Color(0.55f, 0.92f, 0.62f, 1f) else Color(0.72f, 0.86f, 1f, 1f)
+            centerText("Bottles recycled: ${bottleDeposited.size}/${currentLevel.bottles.size}", solvedPos.x, solvedPos.y - 20f, 0.72f)
+            font.color = Color.WHITE
+        }
         val clues = collectedClues()
         if (clues.isNotEmpty()) {
             font.color = Color(1f, 0.9f, 0.55f, 1f)
@@ -2008,21 +2623,25 @@ class EscapeGdxGame(
         batch.end()
     }
 
+    /** Global font-size multiplier for ALL escape-room text. Every per-element
+     *  scale is multiplied by this, so bump it once to make everything bigger. */
+    private val fontScale = 1.5f
+
     private fun centerText(text: String, cx: Float, cy: Float, scale: Float) {
-        font.data.setScale(scale)
+        font.data.setScale(scale * fontScale)
         layout.setText(font, text)
         font.draw(batch, layout, cx - layout.width / 2f, cy + layout.height / 2f)
     }
 
     private fun wrapText(text: String, cx: Float, topY: Float, width: Float, scale: Float) {
-        font.data.setScale(scale)
+        font.data.setScale(scale * fontScale)
         layout.setText(font, text, font.color, width, Align.center, true)
         font.draw(batch, layout, cx - width / 2f, topY)
     }
 
     /** Left-aligned wrapped text, vertically centred on [centerY]. */
     private fun wrapLeft(text: String, x: Float, centerY: Float, width: Float, scale: Float) {
-        font.data.setScale(scale)
+        font.data.setScale(scale * fontScale)
         layout.setText(font, text, font.color, width, Align.left, true)
         font.draw(batch, layout, x, centerY + layout.height / 2f)
     }

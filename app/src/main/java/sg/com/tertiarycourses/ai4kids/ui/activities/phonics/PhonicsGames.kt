@@ -14,8 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -100,7 +100,7 @@ private fun HearButton(onClick: () -> Unit, color: Color) {
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Icon(Icons.Filled.VolumeUp, contentDescription = "Hear it", tint = color, modifier = Modifier.size(20.dp))
+        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear it", tint = color, modifier = Modifier.size(20.dp))
         Text("Hear it", color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
@@ -315,7 +315,7 @@ private fun NumberedSoundOption(
                 .clickable(onClick = onHear)
                 .padding(horizontal = 12.dp, vertical = 7.dp),
         ) {
-            Icon(Icons.Filled.VolumeUp, contentDescription = "Hear", tint = color, modifier = Modifier.size(18.dp))
+            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear", tint = color, modifier = Modifier.size(18.dp))
             Text("Hear", color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         // Choose this one.
@@ -507,7 +507,7 @@ fun RhymeGame(
                             .clickable { speak(word) }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
-                        Icon(Icons.Filled.VolumeUp, contentDescription = "Hear $word", tint = color, modifier = Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear $word", tint = color, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -580,7 +580,7 @@ fun ListenFindGame(
                     .background(color)
                     .clickable { speak(round.word) },
             ) {
-                Icon(Icons.Filled.VolumeUp, contentDescription = "Listen", tint = Color.White, modifier = Modifier.size(48.dp))
+                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Listen", tint = Color.White, modifier = Modifier.size(48.dp))
             }
             Text("Tap to hear again", color = Theme.Ink.copy(alpha = 0.5f), fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
@@ -609,7 +609,7 @@ fun ListenFindGame(
                             .clickable { speak(word) }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
-                        Icon(Icons.Filled.VolumeUp, contentDescription = "Hear $word", tint = color, modifier = Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear $word", tint = color, modifier = Modifier.size(18.dp))
                     }
                 }
             }
