@@ -15,6 +15,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack
 import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.viewport.FitViewport
 import sg.com.tertiarycourses.ai4kids.escape.CoopSession
+import sg.com.tertiarycourses.ai4kids.escape.EscapeState
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -70,7 +71,9 @@ class EscapeGdxGame(
     private val PANEL_H = 540f
 
     private val cInk = Color(0.16f, 0.14f, 0.30f, 1f)
-    private val cAccent = Color(0.45f, 0.30f, 0.92f, 1f)
+    // Interactive accent (keypad keys, tiles, badges, the joystick/action button):
+    // follows the level theme so every widget feels at home in its world.
+    private val cAccent get() = currentLevel.cardBtn
     private val confettiColors = arrayOf(
         Color(1f, 0.82f, 0.20f, 1f), Color(0.98f, 0.45f, 0.55f, 1f), Color(0.40f, 0.82f, 0.95f, 1f),
         Color(0.55f, 0.85f, 0.45f, 1f), Color(1f, 0.65f, 0.30f, 1f),
@@ -134,9 +137,10 @@ class EscapeGdxGame(
         private fun keyRect(i: Int): FloatArray {
             val r = i / cols; val c = i % cols
             val kw = cols * btn + (cols - 1) * gapx
-            // Landscape: keypad just right of centre (the count field sits just left).
-            val kx0 = if (landscapePanel) W / 2f + 30f else (W - kw) / 2f
-            val ky0 = if (landscapePanel) 470f else topRowY
+            // Landscape: with a count field the keypad sits right (field on the left);
+            // with no field it centres and drops a little to make room for the question.
+            val kx0 = if (!landscapePanel) (W - kw) / 2f else if (icons != null) W / 2f + 30f else (W - kw) / 2f
+            val ky0 = if (!landscapePanel) topRowY else if (icons != null) 470f else 420f
             return floatArrayOf(kx0 + c * (btn + gapx), ky0 - r * (btn + gapy), btn, btn)
         }
 
@@ -165,13 +169,16 @@ class EscapeGdxGame(
         override val complete: Boolean get() = done
 
         override fun draw() {
-            // Display slot — under the count field (just left of centre) in landscape.
-            val slotX = if (landscapePanel) W / 2f - 250f else (W - 200f) / 2f
-            val slotY = if (landscapePanel) 220f else 452f
+            // Display slot — sits right above the keypad so the keyed-in number reads
+            // together with the keys (centred over them in landscape; above in portrait).
+            val slotX = if (!landscapePanel) (W - 200f) / 2f else if (icons != null) W / 2f + 36f else W / 2f - 100f
+            val slotY = if (!landscapePanel) 452f else if (icons != null) 540f else 490f
             shapes.begin(ShapeRenderer.ShapeType.Filled)
             drawDimAndPanel()
-            shapes.color = cSlot
+            shapes.color = Color(0.10f, 0.12f, 0.14f, 1f)                 // LCD bezel
             shapes.rect(slotX, slotY, 200f, 46f)
+            shapes.color = Color(0.07f, 0.12f, 0.09f, 1f)                 // dark LCD screen
+            shapes.rect(slotX + 4f, slotY + 4f, 192f, 38f)
             keys.indices.forEach { i ->
                 val r = keyRect(i)
                 shapes.color = when (keys[i]) { "OK" -> cGood; "<" -> Color(0.9f, 0.5f, 0.3f, 1f); else -> cAccent }
@@ -186,15 +193,22 @@ class EscapeGdxGame(
                 if (k < 0) drawRobot(c.x, c.y, 15f) else drawGlyph(k, c.x, c.y, 14f)
             }
             font.color = cInk
-            centerText(heading, W / 2f, 650f, 1.2f)
-            // Wrap the prompt so a long one doesn't run under the X (close) button.
-            val promptW = if (landscapePanel) PANEL_W - 160f else 2f * (backCenter.x - backR - 10f - W / 2f)
-            wrapText(prompt, W / 2f, 634f, promptW, 0.82f)
+            centerText(heading, W / 2f, 652f, 1.2f)
+            if (icons != null) {
+                // With a count field filling the body, keep the (short) prompt as a
+                // header tagline — wrapped so it never runs under the X button.
+                val promptW = if (landscapePanel) PANEL_W - 160f else 2f * (backCenter.x - backR - 10f - W / 2f)
+                wrapText(prompt, W / 2f, 634f, promptW, 0.74f)
+            } else {
+                // No count field: the prompt is a real question, centred in the body
+                // right above the display + keypad (together, not split off to one side).
+                wrapText(prompt, W / 2f, if (landscapePanel) 590f else 588f, if (landscapePanel) PANEL_W - 200f else W - 110f, 0.95f)
+            }
             if (showClues) {
                 val cl = collectedClues()
                 if (cl.isNotEmpty()) { font.color = cGood; centerText(cl.joinToString("   "), W / 2f, 540f, 0.78f) }
             }
-            font.color = cInk
+            font.color = Color(0.45f, 0.95f, 0.55f, 1f)                 // glowing LCD digits
             centerText(if (entered.isEmpty()) "_" else entered.toString(), slotX + 100f, slotY + 16f, 1.3f)
             keys.indices.forEach { i ->
                 val r = keyRect(i)
@@ -272,8 +286,8 @@ class EscapeGdxGame(
 
             batch.begin()
             font.color = cInk
-            centerText(heading, W / 2f, 650f, if (land) 1.7f else 1.45f)
-            centerText(subtitle, W / 2f, 620f, if (land) 1.1f else 0.95f)
+            centerText(heading, W / 2f, 652f, if (land) 1.5f else 1.3f)
+            centerText(subtitle, W / 2f, 623f, if (land) 1.0f else 0.85f)
             display.indices.forEach { j ->
                 val r = cardRect(j)
                 val sel = display[j] in seq
@@ -396,7 +410,7 @@ class EscapeGdxGame(
                 drawGlyph(k, (W - coded.size * 56f) / 2f + i * 56f + 28f, 462f, 16f)
             }
             font.color = cInk
-            centerText("Symbol Decoder", W / 2f, 650f, 1.35f)
+            centerText("Symbol Decoder", W / 2f, 652f, 1.2f)
             legend.indices.forEach { k ->
                 val r = legendRect(k)
                 font.color = cInk
@@ -433,7 +447,7 @@ class EscapeGdxGame(
         // to the right column); portrait keeps the compact centred layout.
         private val cell get() = if (landscapePanel) 56f else 44f
         private val x0 get() = if (landscapePanel) PANEL_X + 70f else (W - n * cell) / 2f
-        private val top get() = if (landscapePanel) 610f else 582f
+        private val top get() = 582f
         private val found = HashSet<String>()
         private val foundCells = HashSet<Int>()
         private var startCell = -1
@@ -495,9 +509,8 @@ class EscapeGdxGame(
             shapes.end()
 
             batch.begin()
-            val gcx = x0 + n * cell / 2f // grid centre (== W/2 in portrait)
             font.color = cInk
-            centerText("Word Display", gcx, 656f, 1.1f)
+            centerText("Word Display", W / 2f, 652f, 1.1f) // centred in the panel header
             for (c in 0 until n) centerText((c + 1).toString(), cx(c), top + 16f, 0.7f)
             for (r in 0 until n) centerText((r + 1).toString(), x0 - 16f, cy(r) + 6f, 0.7f)
             val letterScale = if (landscapePanel) 1.05f else 0.85f
@@ -689,7 +702,7 @@ class EscapeGdxGame(
 
             batch.begin()
             font.color = cInk
-            centerText(heading, W / 2f, 636f, 1.2f)
+            centerText(heading, W / 2f, 652f, 1.2f)
             wrapText(question, W / 2f, if (landscapePanel) 576f else 600f, if (landscapePanel) PANEL_W - 160f else 364f, 0.86f)
             order.indices.forEach { j ->
                 val r = optRect(j)
@@ -813,8 +826,8 @@ class EscapeGdxGame(
             smooth.circle(batch, s[0] - endOff, s[1] + cell / 2f, endR, Color(0.95f, 0.80f, 0.22f, 1f))
             smooth.circle(batch, b[0] + cell + endOff, b[1] + cell / 2f, endR, if (complete) cGood else Color(0.62f, 0.64f, 0.72f, 1f))
             font.color = cInk
-            centerText("Power Circuit", W / 2f, 636f, 1.2f)
-            centerText("Spin the pipes to connect power to the bulb", W / 2f, 612f, 0.7f)
+            centerText("Power Circuit", W / 2f, 652f, 1.2f)
+            centerText("Spin the pipes to connect power to the bulb", W / 2f, 623f, 0.7f)
             font.color = Color(0.85f, 0.6f, 0.1f, 1f)
             centerText("PWR", s[0] - endOff, s[1] + cell / 2f - 26f * k, 0.62f)
             font.color = if (complete) cGood else cInk
@@ -882,8 +895,8 @@ class EscapeGdxGame(
             batch.begin()
             animalGlyphs.forEachIndexed { i, g -> drawAnimal(g, colX(i), 500f, 24f) }
             font.color = cInk
-            centerText("Fairness Core Charger", W / 2f, 650f, 1.2f)
-            centerText("Share the treats so everyone gets the same", W / 2f, 624f, 0.72f)
+            centerText("Fairness Core Charger", W / 2f, 652f, 1.2f)
+            centerText("Share the treats so everyone gets the same", W / 2f, 623f, 0.72f)
             animalGlyphs.indices.forEach { i ->
                 font.color = cInk
                 centerText("${give[i]}", colX(i), 452f, 1.4f)
@@ -918,7 +931,7 @@ class EscapeGdxGame(
         private val pitch get() = if (land) 102f else 72f
         private val rowX get() = if (land) PANEL_X + 24f else 36f
         private val rowW get() = if (land) PANEL_W - 48f else W - 72f
-        private val firstTop get() = if (land) 592f else 616f // top edge of row 0 at scroll 0
+        private val firstTop get() = 592f // top edge of row 0 at scroll 0
         private val btnW get() = if (land) 104f else 62f
         private val btnH get() = if (land) 60f else 44f
         private val winTop get() = if (land) 602f else 700f    // scroll window (clip band)
@@ -1003,8 +1016,8 @@ class EscapeGdxGame(
 
             batch.begin()
             font.color = cInk
-            centerText("Kindness Core Charger", W / 2f, 650f, 1.2f)
-            centerText("Tap Kind or Mean for each one", W / 2f, 624f, 0.72f)
+            centerText("Kindness Core Charger", W / 2f, 652f, 1.2f)
+            centerText("Tap Kind or Mean for each one", W / 2f, 623f, 0.72f)
             drawBackLabel()
             batch.end()
         }
@@ -1124,11 +1137,15 @@ class EscapeGdxGame(
 
             font.color = cInk
             centerText("Honesty Core Charger", W / 2f, 652f, 1.2f)
-            centerText("Use the arrows to reach the heart", W / 2f, 626f, 0.62f)
+            centerText("Use the arrows to reach the heart", W / 2f, 623f, 0.62f)
             val sign = v.signs.firstOrNull { it.r == pr && it.c == pc }
-            val sx = if (landscapePanel) padCx else W / 2f
-            val sy = if (landscapePanel) 600f else 336f
-            val sw = if (landscapePanel) 300f else W - 64f
+            // Landscape: centre the prompt in the open gap between the maze and the
+            // D-pad (vertically aligned with the pad), not squeezed above it.
+            val mazeRight = gx0 + cols * cell
+            val dpadLeft = padCx - padGap - padR
+            val sx = if (landscapePanel) (mazeRight + dpadLeft) / 2f else W / 2f
+            val sy = if (landscapePanel) 420f else 336f
+            val sw = if (landscapePanel) (dpadLeft - mazeRight - 24f).coerceIn(180f, 360f) else W - 64f
             when {
                 done -> { font.color = cGood; wrapText("You charged the core the honest way!", sx, sy, sw, 0.64f) }
                 sign != null -> { font.color = cAccent; wrapText(sign.text, sx, sy, sw, 0.58f) }
@@ -1264,10 +1281,10 @@ class EscapeGdxGame(
 
             batch.begin()
             font.color = cInk
-            centerText(heading, W / 2f, 650f, 1.2f)
-            centerText("Word ${wiSafe + 1} of ${words.size}", W / 2f, 600f, 0.72f)
+            centerText(heading, W / 2f, 652f, 1.2f)
+            centerText("Word ${wiSafe + 1} of ${words.size}", W / 2f, 623f, 0.72f)
             val hint = hints.getOrNull(wiSafe)
-            if (hint != null) { font.color = cAccent; wrapText("Clue: $hint", W / 2f, 572f, W - 90f, 0.74f) }
+            if (hint != null) { font.color = cAccent; wrapText("Clue: $hint", W / 2f, 572f, W - 90f, 1f) }
             else { font.color = cInk; centerText("Tap the letters in order", W / 2f, 560f, 0.78f) }
             typed.forEachIndexed { i, ch -> val r = slotRect(i); font.color = cInk; centerText(ch.toString(), r[0] + r[2] / 2f, r[1] + r[3] / 2f, 1.2f) }
             scrambled.indices.forEach { i ->
@@ -1352,7 +1369,7 @@ class EscapeGdxGame(
             batch.begin()
             font.color = cInk
             centerText("Crossword", W / 2f, 652f, 1.2f)
-            centerText("Drag each word into its numbered row", W / 2f, 596f, 0.66f)
+            centerText("Drag each word into its numbered row", W / 2f, 623f, 0.66f)
             rows.forEachIndexed { r, row ->
                 val nr = cellRect(r, row.offset)
                 font.color = Color(0.4f, 0.4f, 0.5f, 1f); centerText("${row.num}", nr[0] + 7f, nr[1] + cell - 7f, 0.45f)
@@ -1430,7 +1447,7 @@ class EscapeGdxGame(
             entered.forEachIndexed { i, g -> val r = slotRect(i); drawGlyph(g, r[0] + r[2] / 2f, r[1] + r[3] / 2f, 14f) }
             font.color = cInk
             centerText("Symbol Lock", W / 2f, 652f, 1.2f)
-            centerText("Spell the secret word in symbols", W / 2f, 610f, 0.7f)
+            centerText("Spell the secret word in symbols", W / 2f, 623f, 0.7f)
             letters.forEachIndexed { k, ch ->
                 val lx = (W - letters.size * 72f) / 2f + k * 72f + 36f
                 font.color = cInk; centerText("$ch =", lx - 16f, 560f, 0.78f)
@@ -1494,6 +1511,11 @@ class EscapeGdxGame(
         /** Every room floor is nudged toward this hue so the level's floors share a
          *  theme while each room keeps its own lightness. */
         val floorTint: Color = Color(0.33f, 0.34f, 0.44f, 1f),
+        /** Puzzle-panel chrome: [card] is the (light) surface dark text reads on,
+         *  [cardBar] the header band + border, [cardBtn] the close button + emblem. */
+        val card: Color = Color.WHITE,
+        val cardBar: Color = Color(0.85f, 0.85f, 0.88f, 1f),
+        val cardBtn: Color = Color(0.92f, 0.40f, 0.40f, 1f),
     )
 
     // A clue drop (parchment placeholder for now) that will explain the trick.
@@ -1510,12 +1532,13 @@ class EscapeGdxGame(
         name = "Robot Lab", gridCols = 3, gridRows = 3,
         bg = Color(0.10f, 0.14f, 0.24f, 1f), // cool steel-blue tech lab
         floorTint = Color(0.24f, 0.34f, 0.50f, 1f),
+        card = Color(0.88f, 0.90f, 0.95f, 1f), cardBar = Color(0.70f, 0.77f, 0.88f, 1f), cardBtn = Color(0.38f, 0.55f, 0.80f, 1f), // brushed steel
         rooms = listOf(
             GridRoom("entrance", "Entrance", null, floorColor(0), gx = 0, gy = 0),
             GridRoom("panel", "Control Panel", "Control Panel", floorColor(4), Color(0.20f, 0.62f, 0.98f, 1f), gx = 1, gy = 0,
                 puzzle = NumberLock("6", "Control Panel", "Count the robots", icons = ROBOT_FIELD), clue = "Display: ROBOT"),
             GridRoom("keypad", "Exit Chamber", "Exit Keypad", floorColor(5), cGood, gx = 2, gy = 0,
-                puzzle = NumberLock("54", "Exit Keypad", "Enter the door code\nIt requires 2 numbers!", showClues = false), requires = "poster"),
+                puzzle = NumberLock("54", "Exit Keypad", "Enter the 2-digit door code", showClues = false), requires = "poster"),
             GridRoom("atrium", "Main Lab", null, floorColor(1), gx = 0, gy = 1, gw = 2),            // wide hub (2x1)
             GridRoom("poster", "Word Display", "Word Display", floorColor(2), cGood, gx = 2, gy = 1, gh = 2,  // tall (1x2)
                 puzzle = WordSearch(
@@ -1544,6 +1567,7 @@ class EscapeGdxGame(
         name = "History Vault", gridCols = 3, gridRows = 3,
         bg = Color(0.17f, 0.13f, 0.09f, 1f), // warm sepia heritage vault
         floorTint = Color(0.44f, 0.36f, 0.22f, 1f),
+        card = Color(0.96f, 0.92f, 0.82f, 1f), cardBar = Color(0.86f, 0.74f, 0.50f, 1f), cardBtn = Color(0.72f, 0.52f, 0.28f, 1f), // parchment + brass
         rooms = listOf(
             GridRoom("hall", "Heritage Hall", null, floorColor(0), gx = 0, gy = 0, gw = 3, gh = 1),  // wide entrance
             GridRoom("west", "Founding Gallery", "Founding Gallery", floorColor(1), Color(0.30f, 0.62f, 0.95f, 1f), gx = 0, gy = 1, gh = 2, // 1819 — holds the Treaty scroll
@@ -1551,7 +1575,7 @@ class EscapeGdxGame(
                     listOf("1819", "1942", "1965"))),
             GridRoom("core", "Time Capsule", "Time Capsule", floorColor(2), cGood, gx = 1, gy = 1),    // the display / exit
             GridRoom("east", "Independence Hall", "Independence Hall", floorColor(3), Color(0.95f, 0.34f, 0.34f, 1f), gx = 2, gy = 1, gh = 2, // 1965 — holds the National Flag
-                puzzle = NumberLock("1965", "Independence Hall", "Key in the year Singapore became independent")),
+                puzzle = NumberLock("1965", "Independence Hall", "What year did Singapore become independent?")),
             GridRoom("top", "Lion City Room", "Lion City Room", floorColor(4), Color(0.95f, 0.80f, 0.22f, 1f), gx = 1, gy = 2, // holds the Merlion
                 puzzle = Unscramble(listOf("SINGA", "PURA"), "Lion City Room",
                     listOf("In Malay, the word for 'lion'.", "In Malay, this means 'city' — put it after Singa for Singapore's old name."))),
@@ -1568,6 +1592,7 @@ class EscapeGdxGame(
         name = "Superhero Tower", gridCols = 2, gridRows = 4,
         bg = Color(0.15f, 0.12f, 0.24f, 1f), // twilight indigo castle
         floorTint = Color(0.38f, 0.30f, 0.50f, 1f),
+        card = Color(0.97f, 0.96f, 0.99f, 1f), cardBar = Color(0.78f, 0.72f, 0.93f, 1f), cardBtn = Color(0.86f, 0.32f, 0.42f, 1f), // comic page
         rooms = listOf(
             GridRoom("foyer", "Foyer", null, floorColor(0), gx = 0, gy = 0, gw = 2),          // wide
             GridRoom("honesty", "Core Charger", "Core Charger", floorColor(1), Color(0.30f, 0.60f, 0.95f, 1f), gx = 0, gy = 1,
@@ -1599,6 +1624,7 @@ class EscapeGdxGame(
         name = "Green Workshop", gridCols = 3, gridRows = 3,                                   // L-shaped (2 voids)
         bg = Color(0.08f, 0.16f, 0.12f, 1f), // dark forest green eco-lab
         floorTint = Color(0.22f, 0.44f, 0.30f, 1f),
+        card = Color(0.91f, 0.95f, 0.87f, 1f), cardBar = Color(0.72f, 0.85f, 0.66f, 1f), cardBtn = Color(0.34f, 0.66f, 0.42f, 1f), // recycled-green paper
         rooms = listOf(
             GridRoom("lobby", "Lobby", null, floorColor(0), gx = 0, gy = 0),
             // ids match the green-lab server stations: panel / bins / circuit.
@@ -1635,6 +1661,7 @@ class EscapeGdxGame(
         name = "Lion City Carnival", gridCols = 3, gridRows = 3,                                  // + shape (3 voids)
         bg = Color(0.18f, 0.10f, 0.12f, 1f), // festive deep maroon (Lion City)
         floorTint = Color(0.48f, 0.28f, 0.26f, 1f),
+        card = Color(0.98f, 0.95f, 0.87f, 1f), cardBar = Color(0.94f, 0.80f, 0.48f, 1f), cardBtn = Color(0.86f, 0.34f, 0.36f, 1f), // cream + gold trim
         rooms = listOf(
             GridRoom("hall", "Grand Hall", "Crossword", floorColor(2), Color(0.95f, 0.80f, 0.22f, 1f), gx = 1, gy = 1,  // central hub
                 puzzle = Crossword(
@@ -1657,7 +1684,7 @@ class EscapeGdxGame(
             GridRoom("fruit", "Fruit Stall", "Fruit Stall", floorColor(4), Color(0.30f, 0.78f, 0.45f, 1f), gx = 1, gy = 2,
                 puzzle = Cipher(listOf('D', 'U', 'R', 'I', 'A', 'N', 'O', 'S'), "DURIAN"),
                 clue = "4 = DURIAN"),
-            GridRoom("exit", "Exit Gate", "Exit Gate", floorColor(5), cGood, gx = 2, gy = 2,
+            GridRoom("exit", "Exit Panel", "Exit Panel", floorColor(5), cGood, gx = 2, gy = 2,
                 puzzle = SymbolLock("LION"),
                 requires = "hall"),
             // grid units (0,0) (0,2) (2,0) are left void -> a plus shape with an exit nub.
@@ -1890,6 +1917,8 @@ class EscapeGdxGame(
     private fun coreRoomOf(id: String): Int = when {
         id == carrying -> currentRoomIndex()
         id in delivered -> suitRoomIndex
+        id in coopCarriedCache -> -1 // a teammate is holding it elsewhere
+        coopDropCache.containsKey(id) -> roomIndexOfId(coopDropCache[id]!!) // a teammate left it here
         coreDrop.containsKey(id) -> roomIndexAt(coreDrop[id]!!)
         id in charged -> stationIndexOf(id)
         currentLevel.directDeliver -> stationIndexOf(id) // the artefact's own gallery
@@ -1897,7 +1926,10 @@ class EscapeGdxGame(
     }
     private fun corePos(id: String): Vector2 = when {
         id == carrying -> coreTmp.set(pos.x, pos.y + CHAR_R + 16f)
-        id in delivered -> coreTmp.set(suitPos.x + (currentLevel.cores.indexOf(id) - 1) * 34f, suitPos.y - 34f)
+        id in delivered -> if (currentLevel.directDeliver) // on the Time Capsule's shelf (Vault) vs. at the suit (Tower)
+            coreTmp.set(suitPos.x + (currentLevel.cores.indexOf(id) - 1) * 30f, suitPos.y + 24f)
+        else coreTmp.set(suitPos.x + (currentLevel.cores.indexOf(id) - 1) * 34f, suitPos.y - 34f)
+        coopDropCache.containsKey(id) -> roomIndexOfId(coopDropCache[id]!!).let { if (it >= 0) coreTmp.set(cells[it].x + cells[it].w / 2f, cells[it].y + cells[it].h / 2f) else coreTmp.set(0f, 0f) }
         coreDrop.containsKey(id) -> coreTmp.set(coreDrop[id]!!)
         id in charged -> stationIndexOf(id).let { if (it >= 0) coreTmp.set(stationPos[it].x, stationPos[it].y - 34f) else coreTmp.set(0f, 0f) }
         else -> coreHome[id]?.let { coreTmp.set(it) } ?: coreTmp.set(0f, 0f)
@@ -1905,8 +1937,9 @@ class EscapeGdxGame(
     /** A core the player can pick up right now (loose in the core room, or a charged one at its station). */
     private fun pickableCore(): String? {
         if (carrying != null) return null
+        val held = coopCarriedCache
         for (id in currentLevel.cores) {
-            if (id in delivered) continue
+            if (id in delivered || id in held) continue // already delivered, or a teammate has it
             if (currentLevel.directDeliver && id !in solved) continue // artefact stays sealed until its gallery is solved
             if (coreRoomOf(id) == currentRoomIndex() && dst(pos.x, pos.y, corePos(id).x, corePos(id).y) < 60f) return id
         }
@@ -1923,20 +1956,24 @@ class EscapeGdxGame(
     private fun bottleRoomOf(id: String): Int = when {
         id == carryingBottle -> currentRoomIndex()
         id in bottleDeposited -> depositRoomIndex
+        id in coopCarriedCache -> -1 // a teammate is holding it elsewhere
+        coopDropCache.containsKey(id) -> roomIndexOfId(coopDropCache[id]!!) // a teammate left it here
         bottleDrop.containsKey(id) -> roomIndexAt(bottleDrop[id]!!)
         else -> bottleHome[id]?.let { roomIndexAt(it) } ?: -1
     }
     private fun bottlePos(id: String): Vector2 = when {
         id == carryingBottle -> bottleTmp.set(pos.x, pos.y + CHAR_R + 18f)
         id in bottleDeposited -> bottleTmp.set(depositPos.x + (currentLevel.bottles.indexOf(id) - 1) * 26f, depositPos.y - 26f)
+        coopDropCache.containsKey(id) -> roomIndexOfId(coopDropCache[id]!!).let { if (it >= 0) bottleTmp.set(cells[it].x + cells[it].w / 2f, cells[it].y + cells[it].h / 2f) else bottleTmp.set(0f, 0f) }
         bottleDrop.containsKey(id) -> bottleTmp.set(bottleDrop[id]!!)
         else -> bottleHome[id]?.let { bottleTmp.set(it) } ?: bottleTmp.set(0f, 0f)
     }
     /** A bottle the player can pick up right now (loose in the room they're standing in). */
     private fun pickableBottle(): String? {
         if (carryingBottle != null) return null
+        val held = coopCarriedCache
         for (id in currentLevel.bottles) {
-            if (id in bottleDeposited) continue
+            if (id in bottleDeposited || id in held) continue // already recycled, or a teammate has it
             if (bottleRoomOf(id) == currentRoomIndex() && dst(pos.x, pos.y, bottlePos(id).x, bottlePos(id).y) < 60f) return id
         }
         return null
@@ -2534,13 +2571,6 @@ class EscapeGdxGame(
                 smooth.rect(batch, cx - 4f, cy - 12f, 8f, 8f, c)
                 smooth.rect(batch, cx - 10f, cy - 22f, 20f, 5f, c)
             }
-            "Exit Gate" -> { // a doorway / gate
-                smooth.rect(batch, cx - 15f, cy - 22f, 6f, 38f, c)
-                smooth.rect(batch, cx + 9f, cy - 22f, 6f, 38f, c)
-                smooth.rect(batch, cx - 15f, cy + 12f, 30f, 6f, c)
-                smooth.rect(batch, cx - 2.5f, cy - 12f, 5f, 7f, w)
-                smooth.triangle(batch, cx - 5f, cy - 6f, 10f, 9f, w)
-            }
             "Core Charger" -> { // a charging dock with a glowing socket
                 smooth.rect(batch, cx - 13f, cy - 22f, 26f, 8f, c)
                 smooth.rect(batch, cx - 4f, cy - 14f, 8f, 16f, c)
@@ -2550,7 +2580,7 @@ class EscapeGdxGame(
                 smooth.line(batch, cx + 2.5f, cy + 15f, cx - 0.5f, cy + 12f, 1.6f, w)
                 smooth.line(batch, cx - 0.5f, cy + 12f, cx + 1.5f, cy + 9f, 1.6f, w)
             }
-            else -> { // lab console (Control Panel, Symbol/Exit Decoder, Exit Chamber keypad)
+            else -> { // lab console (Control Panel, Symbol/Exit Decoder, Exit Chamber, Exit Panel)
                 smooth.line(batch, cx - 11f, cy - 16f, cx - 11f, cy - 22f, 3.5f, c)
                 smooth.line(batch, cx + 11f, cy - 16f, cx + 11f, cy - 22f, 3.5f, c)
                 smooth.rect(batch, cx - 16f, cy - 16f, 32f, 34f, c)
@@ -2653,36 +2683,37 @@ class EscapeGdxGame(
             if (held != null) {
                 if (lvl.directDeliver) {
                     if (nearSuit()) {
-                        delivered.add(held); coreDrop.remove(held); carrying = null; flashMsg = "Artefact placed in the Time Capsule!"; wrongFlash = 0f; return
+                        delivered.add(held); myMilestones.add("dl:$held"); coreDrop.remove(held); carrying = null; flashMsg = "Artefact placed in the Time Capsule!"; wrongFlash = 0f; return
                     }
                 } else {
                     if (!carryingCharged && nearStation(held) && held in solved) {
-                        charged.add(held); coreDrop.remove(held); carrying = null; flashMsg = "Core charged!"; wrongFlash = 0f; return
+                        charged.add(held); myMilestones.add("ch:$held"); coreDrop.remove(held); carrying = null; flashMsg = "Core charged!"; wrongFlash = 0f; return
                     }
                     if (carryingCharged && nearSuit()) {
-                        delivered.add(held); coreDrop.remove(held); carrying = null; flashMsg = "Core powers the suit!"; wrongFlash = 0f; return
+                        delivered.add(held); myMilestones.add("dl:$held"); coreDrop.remove(held); carrying = null; flashMsg = "Core powers the suit!"; wrongFlash = 0f; return
                     }
                 }
                 // Otherwise: set the item down right here so the player can swap it.
                 coreDrop[held] = Vector2(pos.x, pos.y)
+                myDrops[held] = rooms[currentRoomIndex()].id // share the room we left it in
                 if (carryingCharged) charged.add(held)
                 carrying = null
                 return
             } else {
                 val pick = pickableCore()
-                if (pick != null) { carrying = pick; carryingCharged = pick in charged; charged.remove(pick); coreDrop.remove(pick); return }
+                if (pick != null) { carrying = pick; carryingCharged = pick in charged; charged.remove(pick); coreDrop.remove(pick); myDrops.remove(pick); return }
             }
         }
         if (lvl.bottles.isNotEmpty()) {
             val b = carryingBottle
             if (b != null) {
                 if (!carriedClean && nearSink()) { carriedClean = true; flashMsg = "Bottle washed — now recycle it!"; wrongFlash = 0f; return }
-                if (carriedClean && nearDeposit()) { bottleDeposited.add(b); bottleDrop.remove(b); carryingBottle = null; flashMsg = "Bottle recycled!"; wrongFlash = 0f; return }
+                if (carriedClean && nearDeposit()) { bottleDeposited.add(b); myMilestones.add("rc:$b"); bottleDrop.remove(b); carryingBottle = null; flashMsg = "Bottle recycled!"; wrongFlash = 0f; return }
                 // Otherwise set the bottle down right here.
-                bottleDrop[b] = Vector2(pos.x, pos.y); if (carriedClean) bottleWashed.add(b); carryingBottle = null; return
+                bottleDrop[b] = Vector2(pos.x, pos.y); myDrops[b] = rooms[currentRoomIndex()].id; if (carriedClean) bottleWashed.add(b); carryingBottle = null; return
             } else {
                 val pick = pickableBottle()
-                if (pick != null) { carryingBottle = pick; carriedClean = pick in bottleWashed; bottleWashed.remove(pick); bottleDrop.remove(pick); return }
+                if (pick != null) { carryingBottle = pick; carriedClean = pick in bottleWashed; bottleWashed.remove(pick); bottleDrop.remove(pick); myDrops.remove(pick); return }
             }
         }
         val mi = activeMachine()
@@ -2736,12 +2767,22 @@ class EscapeGdxGame(
         coop?.let { c ->
             c.state?.let {
                 solved.addAll(it.solved)
+                // Fold teammates' carry milestones (charged/delivered/recycled) into our
+                // shared item state so the whole team sees items move together.
+                foldCoopMilestones(it)
+                // If we both grabbed the same item in the same tick, the lower-priority
+                // player yields it now so exactly one person holds it on every screen.
+                resolveCarryConflicts(it)
+                // Snapshot what teammates are carrying / where they've dropped items, so
+                // both rendering and pickup agree on each item's whereabouts this frame.
+                coopCarriedCache = mateCarried()
+                coopDropCache = teammateDrops(it)
                 // When the team's shared state flips to "escaped", everyone finishes
                 // together — no teammate is left re-doing a local step (e.g. re-carrying
                 // the kindness-castle cores) that someone else already completed.
                 if (it.escaped && phase != Phase.WON) { phase = Phase.WON; winTime = 0f }
             }
-            c.atStation = rooms[currentRoomIndex()].id
+            c.atStation = encodePresence()
         }
         handleInput(dt)
         winTime = if (phase == Phase.WON) winTime + dt else 0f
@@ -2783,6 +2824,162 @@ class EscapeGdxGame(
     private fun mateX(i: Int, n: Int, c: RoomCell) = c.x + c.w / 2f + (i - (n - 1) / 2f) * 46f
     private fun mateY(c: RoomCell) = c.y + c.h - 44f
 
+    // ---- co-op presence codec --------------------------------------------
+    // The server only shares solved-station ids plus one short presence string
+    // ("atStation") per player, so we piggyback the carry mechanic on that string:
+    //   "<roomId>|<carry>|<milestones>|<drops>"
+    //     carry      = "c:<id>:<f>" (core, f=1 charged) | "b:<id>:<f>" (bottle,
+    //                  f=1 washed) | "" empty-handed  — lets teammates see what you
+    //                  are hauling, rendered on your avatar.
+    //     milestones = cumulative, append-only tokens this player completed:
+    //                  ch:<id> charged · dl:<id> delivered · rc:<id> recycled.
+    //     drops      = "<id>@<roomId>" for each item this player has set down idle and
+    //                  still owns — so a core dropped in another room shows up there for
+    //                  everyone (at the room's centre; exact pixel isn't shared).
+    // Milestones are monotonic, so a teammate folds them permanently into the shared
+    // charged/delivered/recycled sets. Drop ownership transfers the moment someone else
+    // picks the item up (we clear our own record when we see a teammate carrying it).
+    private val myMilestones = LinkedHashSet<String>()
+    private val myDrops = HashMap<String, String>() // itemId -> roomId we left it in
+    // Per-frame snapshot of teammates' carry/drop state (so rendering and pickup agree).
+    private var coopCarriedCache: Set<String> = emptySet()
+    private var coopDropCache: Map<String, String> = emptyMap()
+    private fun roomIndexOfId(id: String) = rooms.indexOfFirst { it.id == id }
+
+    private fun encodePresence(): String {
+        val room = rooms[currentRoomIndex()].id
+        val carry = when {
+            carrying != null -> "c:$carrying:${if (carryingCharged) 1 else 0}"
+            carryingBottle != null -> "b:$carryingBottle:${if (carriedClean) 1 else 0}"
+            else -> ""
+        }
+        val drops = myDrops.entries.joinToString(",") { "${it.key}@${it.value}" }
+        return "$room|$carry|${myMilestones.joinToString(",")}|$drops"
+    }
+
+    private fun presenceRoom(s: String?) = (s ?: "").substringBefore('|')
+    private fun presenceCarry(s: String?): String? =
+        (s ?: "").split('|').getOrNull(1)?.takeIf { it.isNotEmpty() }
+    private fun presenceMilestones(s: String?): List<String> =
+        (s ?: "").split('|').getOrNull(2)?.takeIf { it.isNotEmpty() }?.split(',') ?: emptyList()
+    private fun presenceDrops(s: String?): List<Pair<String, String>> =
+        (s ?: "").split('|').getOrNull(3)?.takeIf { it.isNotEmpty() }?.split(',')
+            ?.mapNotNull { it.split('@').takeIf { p -> p.size == 2 }?.let { p -> p[0] to p[1] } } ?: emptyList()
+
+    /** Items a teammate is currently carrying — you can't pick these up (they're not
+     *  loose). Empty in solo play. */
+    private fun mateCarried(): Set<String> {
+        val st = coop?.state ?: return emptySet()
+        val out = HashSet<String>()
+        st.players.forEach { p ->
+            if (p.learnerId == st.you) return@forEach
+            presenceCarry(p.atStation)?.split(':')?.getOrNull(1)?.let { out.add(it) }
+        }
+        return out
+    }
+
+    /** Resolve a simultaneous grab: pickups can't be made atomic over ~0.8s polling, so
+     *  if two players end up holding the same item, the one with the higher learner id
+     *  yields instantly. The tiebreak is a fixed, shared value, so both clients agree on
+     *  the single keeper without any extra coordination. */
+    private fun resolveCarryConflicts(state: EscapeState) {
+        val mine = carrying ?: carryingBottle ?: return
+        val outranked = state.players.any { p ->
+            p.learnerId != state.you && p.learnerId < state.you &&
+                presenceCarry(p.atStation)?.split(':')?.getOrNull(1) == mine
+        }
+        if (outranked) {
+            if (carrying == mine) { carrying = null; carryingCharged = false }
+            if (carryingBottle == mine) { carryingBottle = null; carriedClean = false }
+            flashMsg = "Your teammate grabbed that one!"; wrongFlash = 0f
+        }
+    }
+
+    /** Fold every teammate's charged/delivered/recycled milestones into our shared
+     *  item sets so the whole team sees the same world (called each frame in co-op). */
+    private fun foldCoopMilestones(state: EscapeState) {
+        state.players.forEach { p ->
+            if (p.learnerId == state.you) return@forEach
+            presenceMilestones(p.atStation).forEach { tok ->
+                val id = tok.substringAfter(':')
+                when {
+                    tok.startsWith("ch:") -> charged.add(id)
+                    tok.startsWith("dl:") -> delivered.add(id)
+                    tok.startsWith("rc:") -> bottleDeposited.add(id)
+                }
+            }
+        }
+        // A teammate now holding an item has taken ownership — drop our stale local copy
+        // (the spot we left it) so it no longer lingers on our screen at the old place.
+        mateCarried().forEach { id -> coreDrop.remove(id); bottleDrop.remove(id); myDrops.remove(id) }
+    }
+
+    /** Where teammates have left items, as id -> roomId (lowest learner id wins a tie).
+     *  Items someone is carrying, or that are delivered, don't count as dropped. */
+    private fun teammateDrops(state: EscapeState): Map<String, String> {
+        val carried = mateCarried()
+        val out = HashMap<String, String>()
+        state.players.sortedBy { it.learnerId }.forEach { p ->
+            if (p.learnerId == state.you) return@forEach
+            presenceDrops(p.atStation).forEach { (id, room) ->
+                if (id !in carried && id != carrying && id !in delivered && id !in out) out[id] = room
+            }
+        }
+        return out
+    }
+
+    /** A distinct exit door per level, drawn in the shapes pass. An accent lights green
+     *  once the exit is [open] (red/themed while still locked); a threshold bar appears
+     *  when the player is [near]. */
+    private fun drawExitDoor(open: Boolean, near: Boolean) {
+        val ex = exitDoor.x; val ey = exitDoor.y
+        val glow = if (open) Color(0.40f, 0.95f, 0.55f, 1f) else Color(0.85f, 0.30f, 0.30f, 1f)
+        when (currentLevel) {
+            robotLab -> { // sci-fi blast door: steel frame, two sliding panels, lit centre seam
+                shapes.color = Color(0.16f, 0.18f, 0.24f, 1f); shapes.rect(ex - 22f, ey - 30f, 44f, 60f)
+                shapes.color = glow; shapes.rect(ex - 19f, ey - 27f, 38f, 54f)        // lit doorway behind
+                val inset = if (open) 10f else 1f
+                shapes.color = Color(0.55f, 0.60f, 0.70f, 1f)
+                shapes.rect(ex - 19f, ey - 27f, 18f - inset, 54f)                     // left panel
+                shapes.rect(ex + 1f + inset, ey - 27f, 18f - inset, 54f)              // right panel
+                shapes.color = Color(0.32f, 0.36f, 0.44f, 1f)                         // hazard stripe
+                shapes.rect(ex - 19f, ey - 4f, 18f - inset, 8f); shapes.rect(ex + 1f + inset, ey - 4f, 18f - inset, 8f)
+            }
+            tower -> { // hero hatch: bold door, red band, gold star medallion
+                shapes.color = Color(0.16f, 0.18f, 0.45f, 1f); shapes.rect(ex - 22f, ey - 30f, 44f, 60f)
+                shapes.color = Color(0.30f, 0.34f, 0.62f, 1f); shapes.rect(ex - 18f, ey - 26f, 36f, 52f)
+                shapes.color = Color(0.86f, 0.24f, 0.30f, 1f); shapes.rect(ex - 18f, ey - 6f, 36f, 11f) // red band
+                val sc = if (open) glow else Color(0.98f, 0.80f, 0.20f, 1f); val r = 10f; val sy = ey + 13f
+                shapes.color = sc                                                     // six-point star medallion
+                shapes.triangle(ex - r, sy - r * 0.5f, ex + r, sy - r * 0.5f, ex, sy + r)
+                shapes.triangle(ex - r, sy + r * 0.5f, ex + r, sy + r * 0.5f, ex, sy - r)
+            }
+            annex -> { // eco workshop: wooden door, round window, leaf accent
+                shapes.color = Color(0.40f, 0.28f, 0.16f, 1f); shapes.rect(ex - 22f, ey - 30f, 44f, 60f)
+                shapes.color = Color(0.34f, 0.52f, 0.30f, 1f); shapes.rect(ex - 18f, ey - 26f, 36f, 52f)
+                shapes.color = Color(0.27f, 0.42f, 0.24f, 1f); shapes.rect(ex - 1f, ey - 26f, 2f, 52f)  // plank seam
+                shapes.color = if (open) glow else Color(0.70f, 0.86f, 0.95f, 1f); shapes.circle(ex, ey + 12f, 8f) // window
+                shapes.color = Color(0.55f, 0.78f, 0.40f, 1f); shapes.triangle(ex - 13f, ey - 12f, ex - 4f, ey - 5f, ex - 13f, ey + 2f) // leaf
+            }
+            vault -> { // bank-vault door: brass disc with a cross-handle wheel
+                shapes.color = Color(0.34f, 0.28f, 0.16f, 1f); shapes.rect(ex - 24f, ey - 28f, 48f, 56f) // frame
+                shapes.color = Color(0.62f, 0.50f, 0.24f, 1f); shapes.circle(ex, ey, 25f)                // brass disc
+                shapes.color = Color(0.48f, 0.38f, 0.18f, 1f); shapes.circle(ex, ey, 17f)
+                shapes.color = if (open) glow else Color(0.74f, 0.62f, 0.34f, 1f)
+                shapes.rect(ex - 16f, ey - 3f, 32f, 6f); shapes.rect(ex - 3f, ey - 16f, 6f, 32f)         // cross handle
+                shapes.color = Color(0.30f, 0.24f, 0.12f, 1f); shapes.circle(ex, ey, 4f)                 // hub
+            }
+            else -> { // Lion City Carnival: festive pagoda gate, gold pillars + roof
+                shapes.color = Color(0.74f, 0.16f, 0.18f, 1f); shapes.rect(ex - 19f, ey - 28f, 38f, 50f) // red door
+                shapes.color = Color(0.92f, 0.72f, 0.26f, 1f)                                            // gold pillars
+                shapes.rect(ex - 24f, ey - 28f, 5f, 50f); shapes.rect(ex + 19f, ey - 28f, 5f, 50f)
+                shapes.triangle(ex - 27f, ey + 22f, ex + 27f, ey + 22f, ex, ey + 34f)                    // pagoda roof
+                shapes.color = if (open) glow else Color(0.95f, 0.85f, 0.40f, 1f); shapes.circle(ex, ey + 2f, 7f) // lantern
+            }
+        }
+        if (near) { shapes.color = Color.WHITE; shapes.rect(ex - 22f, ey - 34f, 44f, 4f) } // step-here threshold
+    }
+
     private fun drawScene() {
         val curIdx = currentRoomIndex()
         val mi = activeMachine()
@@ -2791,8 +2988,26 @@ class EscapeGdxGame(
         val exitOpen = exitUnlocked()
         // Co-op teammates standing in this room (avatar tokens, drawn below).
         val mates = coop?.state?.let { st ->
-            st.players.filter { it.learnerId != st.you && it.atStation == rooms[curIdx].id }
+            st.players.filter { it.learnerId != st.you && presenceRoom(it.atStation) == rooms[curIdx].id }
         } ?: emptyList()
+        // Where each teammate's avatar is drawn (so we can hang a carried item on it).
+        val matePos = mates.mapIndexed { i, m ->
+            m.learnerId to Vector2(mateX(i, mates.size, cells[curIdx]), mateY(cells[curIdx]))
+        }.toMap()
+        // Items a teammate in this room is currently hauling: id -> (learnerId, flag).
+        val mateCore = HashMap<String, Pair<Int, Boolean>>()
+        val mateBottle = HashMap<String, Pair<Int, Boolean>>()
+        mates.forEach { m ->
+            val parts = presenceCarry(m.atStation)?.split(':') ?: return@forEach
+            if (parts.size >= 3) {
+                val pair = m.learnerId to (parts[2] == "1")
+                if (parts[0] == "c") mateCore[parts[1]] = pair else if (parts[0] == "b") mateBottle[parts[1]] = pair
+            }
+        }
+        // Items any teammate is carrying (in any room — hides our home copy), and the
+        // rooms teammates have set items down in (drawn at that room's centre).
+        val carriedAway = coopCarriedCache
+        val drops = coopDropCache
 
         // Context action — carrying a core to charge/power takes priority over a machine.
         val held = carrying
@@ -2806,7 +3021,7 @@ class EscapeGdxGame(
             carryingBottle != null && carriedClean && nearDeposit() -> "RECYCLE"
             carryingBottle != null -> "DROP"
             currentLevel.bottles.isNotEmpty() && pickableBottle() != null -> "TAKE"
-            mi != null && isLocked(mi) -> "LOCK"
+            mi != null && isLocked(mi) -> "LOCKED"
             mi != null && rooms[mi].id in solved -> "VIEW"
             mi != null -> "USE"
             nearC -> "READ"
@@ -2832,25 +3047,23 @@ class EscapeGdxGame(
         shapes.color = wallColor
         walls.forEach { shapes.rect(it[0], it[1], it[2], it[3]) }
 
-        // Exit door (sits in the Exit Chamber — the last room).
-        if (curIdx == exitRoomIndex) {
-            shapes.color = if (exitOpen) Color(0.42f, 0.29f, 0.17f, 1f) else Color(0.4f, 0.2f, 0.2f, 1f)
-            shapes.rect(exitDoor.x - 18f, exitDoor.y - 28f, 36f, 56f)
-            if (nearEx) { shapes.color = Color.WHITE; shapes.rect(exitDoor.x - 22f, exitDoor.y + 28f, 44f, 4f) }
-        }
+        // Exit door (sits in the Exit Chamber — the last room), themed per level.
+        if (curIdx == exitRoomIndex) drawExitDoor(exitOpen, nearEx)
 
-        // The Time Capsule (direct-delivery display): a plinth ringed with one socket
-        // per artefact. A socket lights in the artefact's colour once it's placed; the
-        // plinth glows green when the display is complete.
+        // The Time Capsule (direct-delivery display): a stone pedestal with a display
+        // shelf holding one socket per artefact. A socket lights in the artefact's
+        // colour once it's placed; the pedestal glows green when the display is complete.
         if (currentLevel.directDeliver && curIdx == suitRoomIndex) {
             val full = delivered.size >= currentLevel.cores.size
-            shapes.color = if (full) cGood else Color(0.46f, 0.48f, 0.56f, 1f)
-            shapes.circle(suitPos.x, suitPos.y, 34f)
-            shapes.color = wallColor
-            shapes.circle(suitPos.x, suitPos.y, 19f)
-            currentLevel.cores.forEachIndexed { i, id ->
-                shapes.color = if (id in delivered) coreColor(id) else Color(0.28f, 0.29f, 0.35f, 1f)
-                shapes.circle(suitPos.x + (i - 1) * 34f, suitPos.y - 34f, 9f)
+            val cx = suitPos.x; val cy = suitPos.y
+            val body = if (full) cGood else Color(0.50f, 0.52f, 0.60f, 1f)
+            val dark = Color(0.30f, 0.32f, 0.40f, 1f)
+            shapes.color = dark; shapes.rect(cx - 38f, cy - 42f, 76f, 14f)   // base slab
+            shapes.color = body; shapes.rect(cx - 16f, cy - 30f, 32f, 34f)   // column
+            shapes.color = dark; shapes.rect(cx - 42f, cy + 2f, 84f, 12f)    // display shelf
+            currentLevel.cores.forEachIndexed { i, id ->                     // an artefact socket per core, on the shelf
+                shapes.color = if (id in delivered) coreColor(id) else Color(0.24f, 0.25f, 0.31f, 1f)
+                shapes.circle(cx + (i - 1) * 30f, cy + 24f, 9f)
             }
         }
 
@@ -2882,18 +3095,43 @@ class EscapeGdxGame(
             val r = rooms[curIdx]; val p = stationPos[curIdx]
             drawStation(r.title, p.x, p.y, r.nodeColor, isLocked(curIdx), r.id in solved, mi == curIdx)
         }
+        // Co-op teammate avatars — drawn *before* the items so a core/bottle a teammate
+        // is carrying (or one sitting in the same spot) stays on top and isn't covered.
+        mates.forEachIndexed { i, m ->
+            val mx = mateX(i, mates.size, cells[curIdx]); val my = mateY(cells[curIdx])
+            smooth.circle(batch, mx, my, 16f, playerColor(m.learnerId))
+            smooth.circle(batch, mx - 5f, my + 3f, 3f, cInk)
+            smooth.circle(batch, mx + 5f, my + 3f, 3f, cInk)
+        }
         // Cores (kindness-castle): glow when charged/delivered; only those in this
         // room — or the one being carried — are visible (everything else is fogged).
         currentLevel.cores.forEach { id ->
-            if (id == carrying || coreRoomOf(id) == curIdx) {
-                val cp = corePos(id)
-                // Items stay an anonymous grey until they are "live": Tower cores
-                // when charged; Vault artefacts the moment their gallery is solved.
-                val live = id in delivered || (if (currentLevel.directDeliver) id in solved
-                    else id in charged || (id == carrying && carryingCharged))
-                if (live) smooth.circle(batch, cp.x, cp.y, 18f, Color(1f, 1f, 1f, 0.45f))
-                smooth.circle(batch, cp.x, cp.y, 13f, if (live) coreColor(id) else Color(0.60f, 0.62f, 0.70f, 1f))
-                smooth.circle(batch, cp.x, cp.y, 5f, Color(1f, 1f, 1f, 0.9f))
+            val carrier = mateCore[id]
+            val dropRoom = drops[id]
+            // Draw a core at (cx,cy); grey until "live" (Tower cores when charged, Vault
+            // artefacts once their gallery is solved).
+            fun drawCore(cx: Float, cy: Float, liveFlag: Boolean) {
+                if (liveFlag) smooth.circle(batch, cx, cy, 18f, Color(1f, 1f, 1f, 0.45f))
+                smooth.circle(batch, cx, cy, 13f, if (liveFlag) coreColor(id) else Color(0.60f, 0.62f, 0.70f, 1f))
+                smooth.circle(batch, cx, cy, 5f, Color(1f, 1f, 1f, 0.9f))
+            }
+            val liveShared = id in delivered || (if (currentLevel.directDeliver) id in solved else id in charged)
+            when {
+                // A teammate in this room is hauling this core — draw it on their avatar.
+                carrier != null -> matePos[carrier.first]?.let { mp ->
+                    drawCore(mp.x, mp.y + 24f, if (currentLevel.directDeliver) id in solved else carrier.second)
+                }
+                // Carried by a teammate elsewhere — hide our home copy (it's not here).
+                id in carriedAway -> {}
+                // A teammate left it in this room — show it at the room's centre.
+                dropRoom != null -> if (dropRoom == rooms[curIdx].id) {
+                    val c = cells[curIdx]; drawCore(c.x + c.w / 2f, c.y + c.h / 2f, liveShared)
+                }
+                id == carrying || coreRoomOf(id) == curIdx -> {
+                    val cp = corePos(id)
+                    drawCore(cp.x, cp.y, id in delivered || (if (currentLevel.directDeliver) id in solved
+                        else id in charged || (id == carrying && carryingCharged)))
+                }
             }
         }
         // Recycling chain (green-lab): the sink, the recycle bin, and the bottles.
@@ -2910,19 +3148,26 @@ class EscapeGdxGame(
                 smooth.triangle(batch, bx - 11f, by + 16f, 22f, 11f, Color.WHITE)
             }
             currentLevel.bottles.forEach { id ->
-                if (id == carryingBottle || bottleRoomOf(id) == curIdx) {
-                    val bp = bottlePos(id)
-                    val clean = id in bottleDeposited || id in bottleWashed || (id == carryingBottle && carriedClean)
-                    drawBottle(bp.x, bp.y, 12f, clean)
+                val carrier = mateBottle[id]
+                val dropRoom = drops[id]
+                when {
+                    // A teammate in this room is hauling this bottle — draw it on them.
+                    carrier != null -> matePos[carrier.first]?.let { mp ->
+                        drawBottle(mp.x, mp.y + 24f, 12f, carrier.second)
+                    }
+                    // Carried by a teammate elsewhere — hide our home copy.
+                    id in carriedAway -> {}
+                    // A teammate left it in this room — show it at the room's centre.
+                    dropRoom != null -> if (dropRoom == rooms[curIdx].id) {
+                        val c = cells[curIdx]; drawBottle(c.x + c.w / 2f, c.y + c.h / 2f, 12f, id in bottleDeposited || id in bottleWashed)
+                    }
+                    id == carryingBottle || bottleRoomOf(id) == curIdx -> {
+                        val bp = bottlePos(id)
+                        val clean = id in bottleDeposited || id in bottleWashed || (id == carryingBottle && carriedClean)
+                        drawBottle(bp.x, bp.y, 12f, clean)
+                    }
                 }
             }
-        }
-        // Co-op teammate avatars (a coloured character token per player here).
-        mates.forEachIndexed { i, m ->
-            val mx = mateX(i, mates.size, cells[curIdx]); val my = mateY(cells[curIdx])
-            smooth.circle(batch, mx, my, 16f, playerColor(m.learnerId))
-            smooth.circle(batch, mx - 5f, my + 3f, 3f, cInk)
-            smooth.circle(batch, mx + 5f, my + 3f, 3f, cInk)
         }
         // Player (drawn over the fog so it's never clipped at doorways).
         smooth.circle(batch, pos.x, pos.y, CHAR_R, Color(0.98f, 0.80f, 0.16f, 1f))
@@ -2964,12 +3209,52 @@ class EscapeGdxGame(
     }
 
     private fun drawDimAndPanel() {
+        val lvl = currentLevel
         shapes.color = Color(0f, 0f, 0f, 0.6f)
         shapes.rect(0f, 0f, W, H)
-        shapes.color = Color.WHITE
+        // Themed border frame, tinted surface, then a header band that every puzzle's
+        // title (y=652) and subtitle (y=623) are standardised to sit on. The band's
+        // bottom (y=614) clears all content (the highest is NumberLock's icons at ~605).
+        shapes.color = lvl.cardBar
+        shapes.rect(PANEL_X - 5f, PANEL_Y - 5f, PANEL_W + 10f, PANEL_H + 10f)
+        shapes.color = lvl.card
         shapes.rect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H)
-        shapes.color = Color(0.92f, 0.40f, 0.40f, 1f)
+        shapes.color = lvl.cardBar
+        shapes.rect(PANEL_X, PANEL_Y + PANEL_H - 61f, PANEL_W, 61f)
+        shapes.color = lvl.cardBtn                                            // close button
         shapes.circle(backCenter.x, backCenter.y, backR)
+        drawLevelEmblem(PANEL_X + 30f, PANEL_Y + PANEL_H - 22f)               // a small theme emblem in the header
+    }
+
+    /** A small per-level emblem drawn in the panel header (ShapeRenderer, in the
+     *  level's accent colour) so you can tell the world at a glance. */
+    private fun drawLevelEmblem(x: Float, y: Float) {
+        val lvl = currentLevel
+        shapes.color = lvl.cardBtn
+        when (lvl) {
+            robotLab -> { // a gear
+                shapes.rect(x - 2f, y + 6f, 4f, 4f); shapes.rect(x - 2f, y - 10f, 4f, 4f)
+                shapes.rect(x + 6f, y - 2f, 4f, 4f); shapes.rect(x - 10f, y - 2f, 4f, 4f)
+                shapes.circle(x, y, 8f)
+                shapes.color = lvl.cardBar; shapes.circle(x, y, 3.5f)
+            }
+            tower -> { // a hero star
+                shapes.triangle(x - 9f, y - 3f, x + 9f, y - 3f, x, y + 9f)
+                shapes.triangle(x - 9f, y + 3f, x + 9f, y + 3f, x, y - 9f)
+            }
+            annex -> { // a leaf
+                shapes.triangle(x - 7f, y - 6f, x + 7f, y - 6f, x, y + 8f)
+                shapes.rect(x - 1f, y - 10f, 2f, 5f)
+            }
+            vault -> { // a column
+                shapes.rect(x - 7f, y + 6f, 14f, 3f); shapes.rect(x - 7f, y - 9f, 14f, 3f)
+                shapes.rect(x - 5f, y - 6f, 3f, 12f); shapes.rect(x + 2f, y - 6f, 3f, 12f)
+            }
+            else -> { // a festive lantern (bigHall)
+                shapes.circle(x, y, 7f)
+                shapes.rect(x - 4f, y + 6f, 8f, 3f); shapes.rect(x - 1f, y - 11f, 2f, 4f)
+            }
+        }
     }
 
     private fun drawBackLabel() {

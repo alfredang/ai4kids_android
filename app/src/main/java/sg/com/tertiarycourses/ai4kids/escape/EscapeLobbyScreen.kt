@@ -145,7 +145,7 @@ fun EscapeLobbyScreen(onClose: () -> Unit, onPlay: (code: String?, host: Boolean
                     ESCAPE_LEVELS.forEachIndexed { i, name ->
                         KidButton(
                             title = name,
-                            color = if (i == 0) Theme.Teal else Theme.Purple,
+                            color = Theme.Purple,
                             onClick = { onPlay(null, false, i) },
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -161,7 +161,7 @@ fun EscapeLobbyScreen(onClose: () -> Unit, onPlay: (code: String?, host: Boolean
                     ESCAPE_LEVELS.forEachIndexed { i, name ->
                         KidButton(
                             title = if (busy) "Starting…" else name,
-                            color = if (busy) Theme.Ink.copy(alpha = 0.3f) else if (i == 0) Theme.Teal else Theme.Purple,
+                            color = if (busy) Theme.Ink.copy(alpha = 0.3f) else Theme.Purple,
                             enabled = !busy,
                             onClick = { host(ESCAPE_COOP_SLUGS[i]) },
                             modifier = Modifier.fillMaxWidth(),
