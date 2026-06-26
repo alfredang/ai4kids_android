@@ -49,7 +49,7 @@ enum class Activity(
         title = "Code Puzzles",
         subtitle = "Solve coding puzzles",
         color = Theme.Blue,
-        ageBand = "Ages 10–12",
+        ageBand = "Ages 7–12",
         icon = Icons.Filled.Extension,
     ),
     ESCAPE(
