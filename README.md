@@ -33,9 +33,9 @@ Kids earn ⭐️ stars for completing rounds, the home header keeps a running to
 **Parents' Corner** explains the privacy stance and can reset progress.
 
 The core learning activities are **offline-first** — no login, progress stored locally on
-the device. **Phonics Quest** can optionally call Google **Gemini** for a "Phonics Buddy"
-that gives spoken hints and praise (off unless an API key is set; the games stay fully
-playable without it). The **Escape Room** is a top-down puzzle adventure (built with
+the device. **Phonics Quest** (spoken "Buddy" hints) and **Story Builder** (freshly-written
+tales) can optionally call Google **Gemini** when an API key is set; both stay fully playable
+offline without it. The **Escape Room** is a top-down puzzle adventure (built with
 LibGDX) you can play solo offline or **co-op** with friends over a room code. The **Brain
 Arcade** adds **online multiplayer card games**. Co-op Escape and the Brain Arcade need a
 sign-in and an internet connection; everything else works fully offline.
@@ -236,14 +236,18 @@ Leave it blank and the phonics games still work fully offline (just without the 
 
 ## Privacy
 
-- Story Builder, Code Puzzles and the **solo** Escape Room request **no network** and
-  collect **no data**.
-- Phonics Quest is offline too; its optional **Gemini "Buddy"** only sends a short text
-  prompt to Google's API when a key is configured **and** the child taps "Ask Buddy".
+- **Code Puzzles** and the **solo** Escape Room request **no network** and collect **no data**.
+- **Story Builder** and **Phonics Quest** are offline by default. When a Gemini API key is
+  configured they can call Google's **Gemini** API: Story Builder sends the chosen
+  ingredients (hero, place, item, mood) to write a story, and Phonics Quest's **"Buddy"**
+  sends a short prompt for a hint when the child taps "Ask Buddy". With no key, both run
+  fully on-device.
 - `INTERNET` / `ACCESS_NETWORK_STATE` permissions are used by Brain Arcade's online card
-  games, **co-op** Escape rooms, and the optional Phonics AI.
+  games, **co-op** Escape rooms, and the optional Gemini features (Story Builder + Phonics
+  Buddy).
 - The only persisted data is local: star progress, solo best times, and (when signed in)
-  a session cookie for the online play.
+  the online session cookie — stored **encrypted** (Android Keystore) and excluded from
+  backup/transfer.
 
 ## Contributing
 

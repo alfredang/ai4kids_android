@@ -94,6 +94,9 @@ object EscapeApi {
     /** Reuse Brain Arcade's login/session — no separate auth for escape rooms. */
     fun isLoggedIn() = CardApi.isLoggedIn()
 
+    /** Sign out — clears the shared session cookie (also signs out Brain Arcade). */
+    fun logout() = CardApi.logout()
+
     fun create(roomSlug: String): EscapeState =
         post("create", JSONObject().put("roomSlug", roomSlug))
 

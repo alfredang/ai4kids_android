@@ -11,8 +11,10 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -89,6 +91,8 @@ fun KidButton(
             .clip(shape)
             .background(color)
             .clickableNoRipple(interaction, enabled, onClick)
+            // Guarantee a comfortable tap target even for short labels.
+            .defaultMinSize(minHeight = 56.dp)
             .padding(horizontal = 28.dp, vertical = 16.dp),
     ) {
         if (icon != null) {
@@ -99,6 +103,8 @@ fun KidButton(
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
@@ -131,25 +137,34 @@ fun StarBadge(count: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** Standard rounded "close / back to home" button used by every activity. */
+/** Standard rounded "close / back to home" button used by every activity. The
+ *  tappable area (56dp) is larger than the visible circle (44dp) so small hands
+ *  can hit it easily without the button itself looking oversized. */
 @Composable
 fun CloseButton(onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .softShadow(CircleShape)
+            .size(56.dp)
             .clip(CircleShape)
-            .background(Color.White)
-            .clickableNoRipple(interaction, true, onClick)
-            .padding(14.dp),
+            .clickableNoRipple(interaction, true, onClick),
     ) {
-        Icon(
-            Icons.Filled.Close,
-            contentDescription = "Close",
-            tint = Theme.Ink,
-            modifier = Modifier.size(22.dp),
-        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(44.dp)
+                .softShadow(CircleShape)
+                .clip(CircleShape)
+                .background(Color.White),
+        ) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Close",
+                tint = Theme.Ink,
+                modifier = Modifier.size(24.dp),
+            )
+        }
     }
 }
 
@@ -162,62 +177,93 @@ fun CelebrationView(message: String, onDismiss: () -> Unit) {
     var animate by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { animate = true }
 
-    val pieces = listOf("⭐️", "🎉", "🌟", "🎈", "✨", "🏆", "🥳")
+    // Split a clean headline from any trailing emoji/stars (anything from the symbol
+    // ranges upward) so the text reads cleanly and the emoji get their own row.
+    val trimmed = message.trim()
+    val cut = trimmed.indexOfLast { it.code < 0x2190 && it != ' ' } + 1
+    val title = trimmed.substring(0, cut).trim()
+    val decor = trimmed.substring(cut).trim()
+
     val cardScale by animateFloatAsState(
         targetValue = if (animate) 1f else 0.5f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "celebrateScale",
     )
 
-    Box(
+    val confettiColors = listOf(
+        Theme.Orange, Theme.Purple, Theme.Teal, Theme.Green,
+        Color(0xFFFFC83D), Color(0xFFFF6F91), Color(0xFF4DA3FF),
+    )
+
+    BoxWithConstraints(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.25f))
             .clickableNoRipple(remember { MutableInteractionSource() }, true, onDismiss),
     ) {
-        // Falling confetti pieces.
-        for (i in 0 until 24) {
+        val wPx = constraints.maxWidth.toFloat()
+        val hPx = constraints.maxHeight.toFloat()
+        // Falling confetti — small bright shapes spread across the whole width, each
+        // drifting, spinning and fading as it falls. Reads cleaner than emoji confetti.
+        for (i in 0 until 30) {
+            val dur = 1800 + (i % 5) * 140
+            val delay = (i * 43) % 700
             val fall by animateFloatAsState(
-                targetValue = if (animate) 420f else -420f,
-                animationSpec = tween(durationMillis = 1600, delayMillis = i * 30),
+                targetValue = if (animate) hPx / 2f + 80f else -hPx / 2f - 80f,
+                animationSpec = tween(durationMillis = dur, delayMillis = delay),
                 label = "confetti$i",
+            )
+            val spin by animateFloatAsState(
+                targetValue = if (animate) (160 + (i * 37) % 220).toFloat() else 0f,
+                animationSpec = tween(durationMillis = dur, delayMillis = delay),
+                label = "confettiSpin$i",
             )
             val alpha by animateFloatAsState(
                 targetValue = if (animate) 0f else 1f,
-                animationSpec = tween(durationMillis = 1600, delayMillis = i * 30),
+                animationSpec = tween(durationMillis = dur, delayMillis = delay),
                 label = "confettiAlpha$i",
             )
-            Text(
-                text = pieces[i % pieces.size],
-                fontSize = 40.sp,
+            val xFrac = (i * 0.1379f) % 1f          // spread across the full width
+            val drift = ((i % 3) - 1) * 26f         // gentle sideways lean
+            Box(
                 modifier = Modifier
+                    .size(width = 10.dp, height = 14.dp)
                     .graphicsLayer {
-                        translationX = ((i * 53) % 320 - 160).toFloat()
+                        translationX = (xFrac - 0.5f) * wPx + drift * (fall / hPx)
                         translationY = fall
+                        rotationZ = spin
                         this.alpha = alpha
-                    },
+                    }
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(confettiColors[i % confettiColors.size]),
             )
         }
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier
                 .scale(cardScale)
                 .softShadow(Theme.BigShape)
                 .clip(Theme.BigShape)
                 .background(Theme.Purple)
-                .padding(40.dp),
+                .padding(horizontal = 44.dp, vertical = 36.dp),
         ) {
-            Text("🎉", fontSize = 90.sp)
-            Text(
-                text = message,
-                color = Color.White,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center,
-            )
+            Text("🎉", fontSize = 80.sp)
+            if (title.isNotBlank()) {
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 32.sp,
+                    lineHeight = 38.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            if (decor.isNotBlank()) {
+                Text(text = decor, fontSize = 40.sp, letterSpacing = 6.sp, textAlign = TextAlign.Center)
+            }
         }
     }
 }

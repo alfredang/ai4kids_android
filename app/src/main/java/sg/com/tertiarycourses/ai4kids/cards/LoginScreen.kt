@@ -74,10 +74,6 @@ fun LoginScreen(onClose: () -> Unit, onLoggedIn: () -> Unit) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 CloseButton(onClick = onClose)
-                Spacer(Modifier.weight(1f))
-                Text("🕹️ Brain Arcade", color = Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                Spacer(Modifier.weight(1f))
-                Spacer(Modifier.widthIn(min = 48.dp))
             }
 
             Spacer(Modifier.weight(1f))
@@ -93,9 +89,9 @@ fun LoginScreen(onClose: () -> Unit, onLoggedIn: () -> Unit) {
                     .padding(28.dp),
             ) {
                 Text("🤖", fontSize = 56.sp)
-                Text("Kid sign-in", color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
+                Text("Sign in", color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
                 Text(
-                    "Sign in to play card games with your friends online.",
+                    "Ask your parent or teacher to sign in for you to play online with friends.",
                     color = Theme.Ink.copy(alpha = 0.6f),
                     fontSize = 15.sp,
                     textAlign = TextAlign.Center,
@@ -130,6 +126,14 @@ fun LoginScreen(onClose: () -> Unit, onLoggedIn: () -> Unit) {
                     enabled = !busy && identifier.isNotBlank() && password.isNotBlank(),
                     onClick = { submit() },
                     modifier = Modifier.fillMaxWidth(),
+                )
+
+                // No self-registration: accounts are provisioned by a parent/admin.
+                Text(
+                    "No sign-up here — a parent or teacher creates your account.",
+                    color = Theme.Ink.copy(alpha = 0.45f),
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
                 )
             }
 

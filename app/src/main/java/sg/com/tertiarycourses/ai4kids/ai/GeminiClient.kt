@@ -78,4 +78,64 @@ object GeminiClient {
             }
         }.getOrNull()
     }
+
+    /**
+     * Generate a structured JSON reply for [prompt] (e.g. a multi-page Story
+     * Builder tale). Forces `application/json` output, disables "thinking" so the
+     * token budget goes to the story, and applies strict kid-safety filters.
+     * Returns the raw JSON text, or null on any failure so callers fall back.
+     */
+    suspend fun generateJson(prompt: String, maxTokens: Int = 1200): String? = withContext(Dispatchers.IO) {
+        val key = BuildConfig.GEMINI_API_KEY
+        if (key.isBlank()) return@withContext null
+
+        val body = JSONObject()
+            .put(
+                "contents",
+                JSONArray().put(
+                    JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt))),
+                ),
+            )
+            .put(
+                "generationConfig",
+                JSONObject()
+                    .put("maxOutputTokens", maxTokens)
+                    .put("temperature", 1.0)
+                    .put("responseMimeType", "application/json")
+                    .put("thinkingConfig", JSONObject().put("thinkingBudget", 0)),
+            )
+            .put(
+                "safetySettings",
+                JSONArray()
+                    .put(safety("HARM_CATEGORY_HARASSMENT"))
+                    .put(safety("HARM_CATEGORY_HATE_SPEECH"))
+                    .put(safety("HARM_CATEGORY_SEXUALLY_EXPLICIT"))
+                    .put(safety("HARM_CATEGORY_DANGEROUS_CONTENT")),
+            )
+
+        val request = Request.Builder()
+            .url(ENDPOINT)
+            .header("x-goog-api-key", key)
+            .post(body.toString().toRequestBody(JSON))
+            .build()
+
+        runCatching {
+            client.newCall(request).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) return@use null
+                JSONObject(text)
+                    .optJSONArray("candidates")
+                    ?.optJSONObject(0)
+                    ?.optJSONObject("content")
+                    ?.optJSONArray("parts")
+                    ?.optJSONObject(0)
+                    ?.optString("text")
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+            }
+        }.getOrNull()
+    }
+
+    private fun safety(category: String): JSONObject =
+        JSONObject().put("category", category).put("threshold", "BLOCK_LOW_AND_ABOVE")
 }

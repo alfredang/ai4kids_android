@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +66,7 @@ fun EscapeLobbyScreen(onClose: () -> Unit, onPlay: (code: String?, host: Boolean
     var joinCode by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var loggedIn by remember { mutableStateOf(EscapeApi.isLoggedIn()) }
     val scope = rememberCoroutineScope()
 
     BackHandler { if (lobby != null) { lobby = null } else if (step != Step.CHOOSE) { step = Step.CHOOSE } else onClose() }
@@ -102,7 +104,7 @@ fun EscapeLobbyScreen(onClose: () -> Unit, onPlay: (code: String?, host: Boolean
     }
 
     if (step == Step.LOGIN) {
-        LoginScreen(onClose = { step = Step.CHOOSE }, onLoggedIn = { step = Step.COOP })
+        LoginScreen(onClose = { step = Step.CHOOSE }, onLoggedIn = { loggedIn = true; step = Step.COOP })
         return
     }
 
@@ -121,7 +123,18 @@ fun EscapeLobbyScreen(onClose: () -> Unit, onPlay: (code: String?, host: Boolean
                 Spacer(Modifier.weight(1f))
                 Text("🚪 Escape Room", color = Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.weight(1f))
-                Spacer(Modifier.widthIn(min = 48.dp))
+                // Sign in / out for the online co-op session (shared with Brain Arcade).
+                if (loggedIn) {
+                    TextButton(onClick = {
+                        EscapeApi.logout()
+                        loggedIn = false
+                        step = Step.CHOOSE
+                    }) { Text("Sign out", color = Theme.Ink.copy(alpha = 0.55f)) }
+                } else {
+                    TextButton(onClick = { step = Step.LOGIN }) {
+                        Text("Sign in", color = Theme.Purple, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
             when (step) {
@@ -131,7 +144,7 @@ fun EscapeLobbyScreen(onClose: () -> Unit, onPlay: (code: String?, host: Boolean
                     KidButton(
                         title = "Play with friends",
                         color = Theme.Purple,
-                        onClick = { step = if (EscapeApi.isLoggedIn()) Step.COOP else Step.LOGIN },
+                        onClick = { step = if (loggedIn) Step.COOP else Step.LOGIN },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
