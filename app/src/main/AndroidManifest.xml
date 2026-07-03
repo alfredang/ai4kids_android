@@ -5,6 +5,9 @@
          card games talk to the ai4kids backend, so internet access is needed. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Optional: the Talking Buddy's "tap to talk" uses on-device speech
+         recognition. Requested at runtime; the buddy also works via typing. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:allowBackup="true"

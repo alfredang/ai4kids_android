@@ -25,8 +25,18 @@ talk to the ai4kids backend:
 - **Co-op Escape Rooms** — multiplayer sessions over the same Escape Room
   (`escape/` session layer + the LibGDX game in `gdx/`)
 
-The Phonics "Buddy" can also call Google's **Gemini API** when a key is supplied
-(it stays fully offline when the key is blank).
+Two **AI activities** live on the home grid and call Google's **Gemini API**
+(with a Cloudflare Workers AI image fallback) when a key is supplied — they show a
+friendly "ask a grown-up" state when no key is configured:
+
+- **Talking Buddy** (`ui/activities/buddy/`) — chat by voice or text. Replies come
+  from Gemini; **speech-in uses on-device `SpeechRecognizer`** and **speech-out
+  on-device `TextToSpeech`**, so only the chat *text* leaves the phone.
+- **Art Studio** (`ui/activities/art/`) — an AI-painted picture (Gemini "Nano
+  Banana", Cloudflare Flux fallback) the child can then turn into a jigsaw.
+
+The Phonics "Buddy" can also call Gemini for hints. All Gemini/Cloudflare usage
+stays fully offline when the keys are blank.
 
 ## Privacy posture
 
@@ -37,6 +47,15 @@ The Phonics "Buddy" can also call Google's **Gemini API** when a key is supplied
   gameplay data to the ai4kids backend (NextAuth session, room codes, moves,
   co-op presence). The app is therefore **not** "Data Not Collected" — keep the
   Play **Data Safety** form in sync whenever these features change.
+- **AI activities (Talking Buddy, Art Studio)** send the child's typed/spoken
+  message or drawing prompt to **Google Gemini** (and, for the image fallback,
+  **Cloudflare Workers AI**) — off-device. The Talking Buddy also uses Android's
+  **`SpeechRecognizer`**, which may send audio to Google for cloud recognition
+  (we pass `EXTRA_PREFER_OFFLINE`); `TextToSpeech` stays on-device. These are
+  keyed features that stay dormant with no key — but when enabled they collect,
+  so keep the **Data Safety** form and the `RECORD_AUDIO` permission disclosure
+  in sync. Keys live in git-ignored `local.properties` → `BuildConfig`, never in
+  source or on the client UI.
 - Kids **don't self-register**; accounts are provisioned by a parent/admin
   (`LoginScreen` is sign-in only).
 - **Network:** production is HTTPS-only; cleartext is permitted *only* for local
@@ -61,6 +80,11 @@ it fits this posture **and** update the privacy disclosure.
     `CelebrationView`, `kidCard`/`softShadow` modifiers
   - `ui/activities/` — one screen per home activity
   - `ui/activities/phonics/` — Phonics Quest content + optional Gemini "Buddy"
+  - `ui/activities/buddy/` — **Talking Buddy** (`TalkingBuddyScreen`, `BuddyFace`
+    Canvas, `BuddyVoice` on-device TTS)
+  - `ui/activities/art/` — **Art Studio** (`ArtStudioScreen`, `JigsawBoard`)
+  - `ai/` — `GeminiClient` (text/JSON/chat/image), `CloudflareClient` (Flux image
+    fallback), `ArtEngine` (safety-gate + generate orchestrator)
   - `cards/` — online **Brain Arcade**: `CardApi.kt` (OkHttp + NextAuth client,
     Keystore-encrypted session), `LoginScreen.kt`, `BrainArcadeScreen.kt`,
     `CardGameScreen.kt`

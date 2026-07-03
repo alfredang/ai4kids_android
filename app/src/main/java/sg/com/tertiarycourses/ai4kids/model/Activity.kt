@@ -2,7 +2,9 @@ package sg.com.tertiarycourses.ai4kids.model
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
+import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.ui.graphics.Color
@@ -59,6 +61,25 @@ enum class Activity(
         color = Theme.Teal,
         ageBand = "Ages 7–12",
         icon = Icons.Filled.MeetingRoom,
+    ),
+
+    // The two AI activities need a Gemini (and optional Cloudflare) key — they
+    // degrade to a friendly "ask a grown-up" state when none is configured.
+    BUDDY(
+        id = "buddy",
+        title = "Talking Buddy",
+        subtitle = "Chat with your AI pal",
+        color = Theme.Blue,
+        ageBand = "Ages 5–10",
+        icon = Icons.Filled.Face,
+    ),
+    ART(
+        id = "art",
+        title = "Art Studio",
+        subtitle = "Paint with AI, then puzzle it",
+        color = Theme.Orange,
+        ageBand = "Ages 5–12",
+        icon = Icons.Filled.Brush,
     );
 
     companion object {
