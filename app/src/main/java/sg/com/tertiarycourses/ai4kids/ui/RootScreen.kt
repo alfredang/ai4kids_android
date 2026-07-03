@@ -53,6 +53,8 @@ import sg.com.tertiarycourses.ai4kids.escape.EscapeLobbyScreen
 import sg.com.tertiarycourses.ai4kids.gdx.EscapeActivity
 import sg.com.tertiarycourses.ai4kids.model.Activity
 import sg.com.tertiarycourses.ai4kids.ui.activities.CodePuzzlesScreen
+import sg.com.tertiarycourses.ai4kids.ui.activities.art.ArtStudioScreen
+import sg.com.tertiarycourses.ai4kids.ui.activities.buddy.TalkingBuddyScreen
 import sg.com.tertiarycourses.ai4kids.ui.activities.phonics.PhonicsScreen
 import sg.com.tertiarycourses.ai4kids.ui.activities.StoryBuilderScreen
 import sg.com.tertiarycourses.ai4kids.ui.components.StarBadge
@@ -104,6 +106,8 @@ fun RootScreen(modifier: Modifier = Modifier) {
                 onClose = { selected = null },
                 onPlay = { code, host, level -> launchEscape(code, host, level) },
             )
+            Activity.BUDDY -> TalkingBuddyScreen(onClose = { selected = null })
+            Activity.ART -> ArtStudioScreen(onClose = { selected = null })
             null -> Unit
         }
         showArcade -> BrainArcadeScreen(onClose = { showArcade = false })

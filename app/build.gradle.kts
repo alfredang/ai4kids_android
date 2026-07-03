@@ -9,10 +9,16 @@ plugins {
 // Gemini API key for the Phonics "Buddy" — read from local.properties (which is
 // git-ignored) so the secret never lands in source control. Leave it blank to
 // disable the AI features; the phonics mini-games still work fully offline.
-val geminiApiKey: String = Properties().apply {
+val localProps: Properties = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
-}.getProperty("GEMINI_API_KEY", "")
+}
+val geminiApiKey: String = localProps.getProperty("GEMINI_API_KEY", "")
+// Cloudflare Workers AI — the free-tier image fallback for the AI Art Studio
+// (Flux) when the Gemini image model has no quota. Both optional; leave blank to
+// disable the fallback. Never hard-coded — read from git-ignored local.properties.
+val cloudflareAccountId: String = localProps.getProperty("CLOUDFLARE_ACCOUNT_ID", "")
+val cloudflareAiToken: String = localProps.getProperty("CLOUDFLARE_AI_TOKEN", "")
 
 // LibGDX game engine (Escape Room). Declared before `dependencies {}` uses them.
 val gdxVersion = "1.13.1" // 1.13.x natives are aligned for 16 KB memory pages
@@ -32,6 +38,8 @@ android {
         vectorDrawables { useSupportLibrary = true }
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+        buildConfigField("String", "CLOUDFLARE_ACCOUNT_ID", "\"$cloudflareAccountId\"")
+        buildConfigField("String", "CLOUDFLARE_AI_TOKEN", "\"$cloudflareAiToken\"")
     }
 
     buildTypes {
