@@ -166,7 +166,7 @@ private fun PhonicsBuddy(promptKey: String, prompt: String, color: Color, speak:
                 .clickable(enabled = !busy) {
                     scope.launch {
                         busy = true
-                        val reply = GeminiClient.generate(prompt)
+                        val reply = GeminiClient.generate(prompt, model = GeminiClient.FLASH_LITE)
                         busy = false
                         if (reply != null) {
                             hint = reply
@@ -204,6 +204,7 @@ fun PopPhonemeGame(
     rounds: List<PopRound>,
     color: Color,
     speak: (String) -> Unit,
+    playPhoneme: (String) -> Unit,
     onProgress: (Int, Int) -> Unit,
     onFinish: (Int) -> Unit,
 ) {
@@ -250,12 +251,12 @@ fun PopPhonemeGame(
             textAlign = TextAlign.Center,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
-            options.forEachIndexed { i, c ->
+            options.forEachIndexed { i, slug ->
                 NumberedSoundOption(
                     number = i + 1,
                     isWrong = wrong == i,
                     color = color,
-                    onHear = { speak(phonemeOf(c)) },
+                    onHear = { playPhoneme(slug) },
                     onPick = { pick(i) },
                 )
             }
@@ -265,23 +266,11 @@ fun PopPhonemeGame(
         }
         PhonicsBuddy(
             promptKey = "pop-${round.word}",
-            prompt = "You are a cheerful phonics tutor for a 5-year-old child. In ONE short sentence (max 15 words, simple words), help them hear that the word \"${round.word}\" starts with the letter \"${round.answer}\". Be warm and playful. No emojis.",
+            prompt = "You are a cheerful phonics tutor for a 5-year-old child. In ONE short sentence (max 15 words, simple words), help them hear that the word \"${round.word}\" starts with the letter \"${round.letter}\". Be warm and playful. No emojis.",
             color = color,
             speak = speak,
         )
     }
-}
-
-/** A phonics-style utterance for a letter sound (e.g. B → "buh", S → "suh"),
- *  so TextToSpeech reads the *sound* as a single syllable rather than spelling
- *  out the letter (repeated letters like "sss" get read as "es es"). */
-private fun phonemeOf(letter: Char): String = when (letter.uppercaseChar()) {
-    'A' -> "ah"; 'B' -> "buh"; 'C' -> "kah"; 'D' -> "duh"; 'E' -> "eh"
-    'F' -> "fuh"; 'G' -> "guh"; 'H' -> "huh"; 'I' -> "e"; 'J' -> "juh"
-    'K' -> "kuh"; 'L' -> "luh"; 'M' -> "muh"; 'N' -> "nuh"; 'O' -> "oh"
-    'P' -> "puh"; 'Q' -> "kwuh"; 'R' -> "ruh"; 'S' -> "suh"; 'T' -> "tuh"
-    'U' -> "uh"; 'V' -> "vuh"; 'W' -> "wuh"; 'X' -> "ksuh"; 'Y' -> "yuh"; 'Z' -> "zuh"
-    else -> letter.toString()
 }
 
 /** A numbered option that the child can listen to, then choose. The letter is

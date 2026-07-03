@@ -19,8 +19,18 @@ import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
 /** The mini-game kinds a world can use. */
 enum class PhonicsKind { POP, BUILD, RHYME, LISTEN }
 
-/** "Pop the Phoneme" round: which starting sound does this picture make? */
-data class PopRound(val emoji: String, val word: String, val answer: Char, val options: List<Char>)
+/** "Pop the Phoneme" round: which starting *sound* does this picture make?
+ *  [options] and [answer] are phoneme slugs (clips in `res/raw`, played by
+ *  [PhonemePlayback]) — keyed by sound, not letter, since the child decides by
+ *  ear. [letter] is the grapheme that sound maps to in this word (e.g. Cat →
+ *  'C' for the /k/ sound), used only for the Buddy hint. */
+data class PopRound(
+    val emoji: String,
+    val word: String,
+    val answer: String,
+    val options: List<String>,
+    val letter: Char,
+)
 
 /** "Build the Word" round: spell the word for the picture from letter tiles. */
 data class BuildRound(val emoji: String, val word: String)
@@ -72,13 +82,16 @@ val PHONICS_STAGES: List<PhonicsStage> = listOf(
         emoji = "🅰️",
         color = Theme.Pink,
         kind = PhonicsKind.POP,
+        // Distractors are phonemes that clearly *sound* different from the
+        // answer (a child picks by ear), e.g. Cat's /k/ vs /t/ and /s/ — not the
+        // old C/K/T, since C and K are the same /k/ sound.
         pop = listOf(
-            PopRound("🍎", "Apple", 'A', listOf('A', 'B', 'S')),
-            PopRound("🐻", "Bear", 'B', listOf('B', 'D', 'M')),
-            PopRound("🐱", "Cat", 'C', listOf('C', 'K', 'T')),
-            PopRound("🐶", "Dog", 'D', listOf('D', 'B', 'P')),
-            PopRound("🥚", "Egg", 'E', listOf('E', 'A', 'I')),
-            PopRound("🌙", "Moon", 'M', listOf('M', 'N', 'W')),
+            PopRound("🍎", "Apple", answer = "v_a_short", options = listOf("v_a_short", "c_b", "c_s"), letter = 'A'),
+            PopRound("🐻", "Bear", answer = "c_b", options = listOf("c_b", "c_d", "c_m"), letter = 'B'),
+            PopRound("🐱", "Cat", answer = "c_k", options = listOf("c_k", "c_t", "c_s"), letter = 'C'),
+            PopRound("🐶", "Dog", answer = "c_d", options = listOf("c_d", "c_b", "c_p"), letter = 'D'),
+            PopRound("🥚", "Egg", answer = "v_e_short", options = listOf("v_e_short", "v_a_short", "v_i_short"), letter = 'E'),
+            PopRound("🌙", "Moon", answer = "c_m", options = listOf("c_m", "c_n", "c_w"), letter = 'M'),
         ),
     ),
     PhonicsStage(
