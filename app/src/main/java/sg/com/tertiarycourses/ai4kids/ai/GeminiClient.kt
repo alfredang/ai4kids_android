@@ -43,7 +43,7 @@ object GeminiClient {
      * Generate a short reply for [prompt]. Returns the trimmed text, or null on
      * any failure (no key, no network, bad response) so callers degrade safely.
      */
-    suspend fun generate(prompt: String, maxTokens: Int = 64, model: String = MODEL): String? = withContext(Dispatchers.IO) {
+    suspend fun generate(prompt: String, maxTokens: Int = 120, model: String = MODEL): String? = withContext(Dispatchers.IO) {
         val key = BuildConfig.GEMINI_API_KEY
         if (key.isBlank()) return@withContext null
 
@@ -56,7 +56,12 @@ object GeminiClient {
             )
             .put(
                 "generationConfig",
-                JSONObject().put("maxOutputTokens", maxTokens).put("temperature", 0.9),
+                JSONObject()
+                    .put("maxOutputTokens", maxTokens)
+                    .put("temperature", 0.9)
+                    // Disable "thinking" (default-on for 2.5-flash) so these short
+                    // replies aren't truncated by thinking eating the token budget.
+                    .put("thinkingConfig", JSONObject().put("thinkingBudget", 0)),
             )
 
         val request = Request.Builder()
