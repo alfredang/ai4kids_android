@@ -30,6 +30,9 @@ object CloudflareClient {
             .build()
     }
 
+    /** Debug-only diagnostic logging — a no-op in release builds. */
+    private fun dlog(msg: String) { if (BuildConfig.DEBUG) android.util.Log.w("CloudflareClient", msg) }
+
     /** True when both the account id and Workers AI token are present. */
     fun isConfigured(): Boolean =
         BuildConfig.CLOUDFLARE_ACCOUNT_ID.isNotBlank() && BuildConfig.CLOUDFLARE_AI_TOKEN.isNotBlank()
@@ -53,7 +56,7 @@ object CloudflareClient {
         runCatching {
             client.newCall(request).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) { android.util.Log.w("CloudflareClient", "HTTP ${resp.code}: ${text.take(300)}"); return@use null }
+                if (!resp.isSuccessful) { dlog("HTTP ${resp.code}: ${text.take(300)}"); return@use null }
                 val b64 = JSONObject(text).optJSONObject("result")?.optString("image")
                 if (b64.isNullOrEmpty()) null else Base64.decode(b64, Base64.DEFAULT)
             }

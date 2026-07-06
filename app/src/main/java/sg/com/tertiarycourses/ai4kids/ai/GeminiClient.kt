@@ -43,7 +43,7 @@ object GeminiClient {
      * Generate a short reply for [prompt]. Returns the trimmed text, or null on
      * any failure (no key, no network, bad response) so callers degrade safely.
      */
-    suspend fun generate(prompt: String, maxTokens: Int = 64, model: String = MODEL): String? = withContext(Dispatchers.IO) {
+    suspend fun generate(prompt: String, maxTokens: Int = 120, model: String = MODEL): String? = withContext(Dispatchers.IO) {
         val key = BuildConfig.GEMINI_API_KEY
         if (key.isBlank()) return@withContext null
 
@@ -56,7 +56,12 @@ object GeminiClient {
             )
             .put(
                 "generationConfig",
-                JSONObject().put("maxOutputTokens", maxTokens).put("temperature", 0.9),
+                JSONObject()
+                    .put("maxOutputTokens", maxTokens)
+                    .put("temperature", 0.9)
+                    // Disable "thinking" (default-on for 2.5-flash) so these short
+                    // replies aren't truncated by thinking eating the token budget.
+                    .put("thinkingConfig", JSONObject().put("thinkingBudget", 0)),
             )
 
         val request = Request.Builder()
@@ -68,8 +73,8 @@ object GeminiClient {
         runCatching {
             client.newCall(request).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
-                android.util.Log.w("GeminiClient", "HTTP ${resp.code} (${text.length} bytes)")
-                if (!resp.isSuccessful) { android.util.Log.w("GeminiClient", "body: ${text.take(400)}"); return@use null }
+                dlog("HTTP ${resp.code} (${text.length} bytes)")
+                if (!resp.isSuccessful) { dlog("body: ${text.take(400)}"); return@use null }
                 JSONObject(text)
                     .optJSONArray("candidates")
                     ?.optJSONObject(0)
@@ -80,7 +85,7 @@ object GeminiClient {
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
             }
-        }.onFailure { android.util.Log.w("GeminiClient", "call threw: ${it.message}", it) }.getOrNull()
+        }.onFailure { dlog("call threw: ${it.message}", it) }.getOrNull()
     }
 
     /**
@@ -126,8 +131,8 @@ object GeminiClient {
         runCatching {
             client.newCall(request).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
-                android.util.Log.w("GeminiClient", "HTTP ${resp.code} (${text.length} bytes)")
-                if (!resp.isSuccessful) { android.util.Log.w("GeminiClient", "body: ${text.take(400)}"); return@use null }
+                dlog("HTTP ${resp.code} (${text.length} bytes)")
+                if (!resp.isSuccessful) { dlog("body: ${text.take(400)}"); return@use null }
                 JSONObject(text)
                     .optJSONArray("candidates")
                     ?.optJSONObject(0)
@@ -138,7 +143,7 @@ object GeminiClient {
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
             }
-        }.onFailure { android.util.Log.w("GeminiClient", "call threw: ${it.message}", it) }.getOrNull()
+        }.onFailure { dlog("call threw: ${it.message}", it) }.getOrNull()
     }
 
     /**
@@ -189,8 +194,8 @@ object GeminiClient {
         runCatching {
             client.newCall(request).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
-                android.util.Log.w("GeminiClient", "HTTP ${resp.code} (${text.length} bytes)")
-                if (!resp.isSuccessful) { android.util.Log.w("GeminiClient", "body: ${text.take(400)}"); return@use null }
+                dlog("HTTP ${resp.code} (${text.length} bytes)")
+                if (!resp.isSuccessful) { dlog("body: ${text.take(400)}"); return@use null }
                 JSONObject(text)
                     .optJSONArray("candidates")
                     ?.optJSONObject(0)
@@ -201,7 +206,7 @@ object GeminiClient {
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
             }
-        }.onFailure { android.util.Log.w("GeminiClient", "call threw: ${it.message}", it) }.getOrNull()
+        }.onFailure { dlog("call threw: ${it.message}", it) }.getOrNull()
     }
 
     /** True when the Gemini image model is worth trying (a key is present). */
@@ -233,8 +238,8 @@ object GeminiClient {
         runCatching {
             imageClient.newCall(request).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
-                android.util.Log.w("GeminiClient", "HTTP ${resp.code} (${text.length} bytes)")
-                if (!resp.isSuccessful) { android.util.Log.w("GeminiClient", "body: ${text.take(400)}"); return@use null }
+                dlog("HTTP ${resp.code} (${text.length} bytes)")
+                if (!resp.isSuccessful) { dlog("body: ${text.take(400)}"); return@use null }
                 val parts = JSONObject(text)
                     .optJSONArray("candidates")
                     ?.optJSONObject(0)
@@ -246,7 +251,7 @@ object GeminiClient {
                 }
                 null
             }
-        }.onFailure { android.util.Log.w("GeminiClient", "call threw: ${it.message}", it) }.getOrNull()
+        }.onFailure { dlog("call threw: ${it.message}", it) }.getOrNull()
     }
 
     /**
@@ -265,7 +270,7 @@ object GeminiClient {
         return runCatching {
             val json = JSONObject(raw)
             json.getBoolean("safe") to json.optString("cleanedPrompt").trim().ifEmpty { prompt }
-        }.onFailure { android.util.Log.w("GeminiClient", "call threw: ${it.message}", it) }.getOrNull()
+        }.onFailure { dlog("call threw: ${it.message}", it) }.getOrNull()
     }
 
     /** A separate client with a long read timeout for slow image generation. */
@@ -278,4 +283,10 @@ object GeminiClient {
 
     private fun safety(category: String): JSONObject =
         JSONObject().put("category", category).put("threshold", "BLOCK_LOW_AND_ABOVE")
+
+    /** Debug-only diagnostic logging — compiled to a no-op in release builds so
+     *  API error bodies never reach a shipped device's logcat. */
+    private fun dlog(msg: String, t: Throwable? = null) {
+        if (BuildConfig.DEBUG) android.util.Log.w("GeminiClient", msg, t)
+    }
 }

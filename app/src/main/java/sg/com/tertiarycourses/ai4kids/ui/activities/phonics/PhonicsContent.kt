@@ -17,7 +17,7 @@ import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
  */
 
 /** The mini-game kinds a world can use. */
-enum class PhonicsKind { POP, BUILD, RHYME, LISTEN }
+enum class PhonicsKind { POP, BUILD, RHYME, LISTEN, BLEND, DIGRAPH }
 
 /** "Pop the Phoneme" round: which starting *sound* does this picture make?
  *  [options] and [answer] are phoneme slugs (clips in `res/raw`, played by
@@ -32,8 +32,15 @@ data class PopRound(
     val letter: Char,
 )
 
-/** "Build the Word" round: spell the word for the picture from letter tiles. */
-data class BuildRound(val emoji: String, val word: String)
+/** "Build the Word" round: build the word from letter tiles by *sound*. As each
+ *  correct letter lands, its phoneme clip plays (blending, not letter names);
+ *  [sounds] has one phoneme slug per letter of [word], with "" marking a silent
+ *  letter (e.g. the B in LAMB) — those play no sound, which teaches the silence. */
+data class BuildRound(val emoji: String, val word: String, val sounds: List<String>) {
+    init {
+        require(sounds.size == word.length) { "sounds must have one entry per letter in \"$word\"" }
+    }
+}
 
 /** "Rhyme Time" round: pick the option that rhymes with the target. */
 data class RhymeRound(
@@ -51,6 +58,29 @@ data class ListenRound(
     val answer: Int,
 )
 
+/** "Sound Blender" round: hear each sound, blend them, then tap the matching
+ *  picture — decoded purely by ear (no letters shown). [sounds] are phoneme
+ *  slugs to blend; [options] are emoji→word choices with [answer] correct. */
+data class BlendRound(
+    val word: String,
+    val sounds: List<String>,
+    val options: List<Pair<String, String>>, // emoji to word
+    val answer: Int,
+)
+
+/** "Buddy Sounds" round: hear a two-letter (digraph) sound, then pick the letter
+ *  team that spells it — the child must map the sound to its spelling, so there's
+ *  no read-the-word shortcut. [sound] is the digraph's phoneme slug; [teams] are
+ *  candidate letter pairs (e.g. "sh"); [answer] is the correct index; the example
+ *  emoji/word reinforce it on a win. */
+data class DigraphRound(
+    val sound: String,
+    val teams: List<String>,
+    val answer: Int,
+    val exampleEmoji: String,
+    val exampleWord: String,
+)
+
 /** One world on the adventure map. Only the list matching [kind] is populated. */
 data class PhonicsStage(
     val id: String,
@@ -63,6 +93,8 @@ data class PhonicsStage(
     val build: List<BuildRound> = emptyList(),
     val rhyme: List<RhymeRound> = emptyList(),
     val listen: List<ListenRound> = emptyList(),
+    val blend: List<BlendRound> = emptyList(),
+    val digraph: List<DigraphRound> = emptyList(),
 ) {
     val rounds: Int
         get() = when (kind) {
@@ -70,6 +102,8 @@ data class PhonicsStage(
             PhonicsKind.BUILD -> build.size
             PhonicsKind.RHYME -> rhyme.size
             PhonicsKind.LISTEN -> listen.size
+            PhonicsKind.BLEND -> blend.size
+            PhonicsKind.DIGRAPH -> digraph.size
         }
 }
 
@@ -101,12 +135,14 @@ val PHONICS_STAGES: List<PhonicsStage> = listOf(
         emoji = "🌉",
         color = Theme.Orange,
         kind = PhonicsKind.BUILD,
+        // CVC words: one sound per letter, so tapping a tile sounds it out and a
+        // full build blends into the word (/k/-/æ/-/t/ → "cat").
         build = listOf(
-            BuildRound("🐱", "CAT"),
-            BuildRound("🐶", "DOG"),
-            BuildRound("☀️", "SUN"),
-            BuildRound("🎩", "HAT"),
-            BuildRound("🚌", "BUS"),
+            BuildRound("🐱", "CAT", listOf("c_k", "v_a_short", "c_t")),
+            BuildRound("🐶", "DOG", listOf("c_d", "v_o_short", "c_g")),
+            BuildRound("☀️", "SUN", listOf("c_s", "v_u_short", "c_n")),
+            BuildRound("🎩", "HAT", listOf("c_h", "v_a_short", "c_t")),
+            BuildRound("🚌", "BUS", listOf("c_b", "v_u_short", "c_s")),
         ),
     ),
     PhonicsStage(
@@ -116,12 +152,14 @@ val PHONICS_STAGES: List<PhonicsStage> = listOf(
         emoji = "🤫",
         color = Theme.Purple,
         kind = PhonicsKind.BUILD,
+        // "" marks a silent letter — it plays no sound, so the child hears which
+        // letters are silent while building the word.
         build = listOf(
-            BuildRound("🐑", "LAMB"),   // silent B
-            BuildRound("🔪", "KNIFE"),  // silent K
-            BuildRound("👻", "GHOST"),  // silent H
-            BuildRound("🏰", "CASTLE"), // silent T
-            BuildRound("✍️", "WRITE"),  // silent W
+            BuildRound("🐑", "LAMB", listOf("c_l", "v_a_short", "c_m", "")),        // silent B
+            BuildRound("🔪", "KNIFE", listOf("", "c_n", "d_ie", "c_f", "")),        // silent K, E
+            BuildRound("👻", "GHOST", listOf("c_g", "", "d_oa", "c_s", "c_t")),     // silent H
+            BuildRound("🏰", "CASTLE", listOf("c_k", "v_ar", "c_s", "", "c_l", "")),// silent T, E
+            BuildRound("✍️", "WRITE", listOf("", "c_r", "d_ie", "c_t", "")),        // silent W, E
         ),
     ),
     PhonicsStage(
@@ -152,6 +190,41 @@ val PHONICS_STAGES: List<PhonicsStage> = listOf(
             ListenRound("Tree", listOf("Tree", "Try", "Train"), 0),
             ListenRound("Cat", listOf("Cat", "Cap", "Cot"), 0),
             ListenRound("Bear", listOf("Bear", "Bee", "Boat"), 0),
+        ),
+    ),
+    PhonicsStage(
+        id = "sound-blender",
+        title = "Sound Blender",
+        subtitle = "Blend sounds into words",
+        emoji = "🌀",
+        color = Theme.Teal,
+        kind = PhonicsKind.BLEND,
+        // Hear /p/-/i/-/g/, blend it, tap the pig. Pure decoding of CVC words —
+        // fresh words (only Dog carries over from Blend Bridge) so the child
+        // decodes by ear rather than recalling the earlier build.
+        blend = listOf(
+            BlendRound("Pig", listOf("c_p", "v_i_short", "c_g"), listOf("🐷" to "Pig", "🐶" to "Dog", "🐔" to "Hen"), 0),
+            BlendRound("Hen", listOf("c_h", "v_e_short", "c_n"), listOf("🐔" to "Hen", "🐷" to "Pig", "🐛" to "Bug"), 0),
+            BlendRound("Bug", listOf("c_b", "v_u_short", "c_g"), listOf("🐛" to "Bug", "🐷" to "Pig", "🥤" to "Cup"), 0),
+            BlendRound("Cup", listOf("c_k", "v_u_short", "c_p"), listOf("🥤" to "Cup", "🐛" to "Bug", "🐶" to "Dog"), 0),
+            BlendRound("Dog", listOf("c_d", "v_o_short", "c_g"), listOf("🐶" to "Dog", "🐷" to "Pig", "🐔" to "Hen"), 0),
+        ),
+    ),
+    PhonicsStage(
+        id = "sound-buddies",
+        title = "Sound Buddies",
+        subtitle = "Two letters, one sound",
+        emoji = "🤝",
+        color = Theme.Purple,
+        kind = PhonicsKind.DIGRAPH,
+        // Hear a digraph SOUND, pick the two letters that spell it. The child has
+        // to map the sound to its spelling, so there's no read-the-word shortcut.
+        digraph = listOf(
+            DigraphRound("c_sh", listOf("sh", "ch", "th"), 0, "🚢", "Ship"),
+            DigraphRound("c_ch", listOf("ch", "sh", "th"), 0, "🍟", "Chip"),
+            DigraphRound("c_th_unvoiced", listOf("th", "sh", "ng"), 0, "🛁", "Bath"),
+            DigraphRound("c_ng", listOf("ng", "sh", "ch"), 0, "💍", "Ring"),
+            DigraphRound("c_sh", listOf("sh", "th", "ch"), 0, "🐟", "Fish"),
         ),
     ),
 )
