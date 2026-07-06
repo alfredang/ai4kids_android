@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
@@ -72,6 +73,28 @@ private val LEVELS = listOf(
     Level(4, 0 to 3, 3 to 0, setOf(2 to 2, 2 to 1), maxMoves = 10),
     Level(5, 0 to 0, 4 to 4, setOf(2 to 2, 3 to 2, 1 to 3), maxMoves = 14),
 )
+
+private sealed interface Instr {
+    data class Move(val step: Step) : Instr
+    data class Loop(val body: List<Step>, val times: Int) : Instr 
+}
+
+/** How many grid moves this program actually executes (loops expanded). */
+private fun List<Instr>.moveCount(): Int = sumOf {
+    when (it) {
+        is Instr.Move -> 1
+        is Instr.Loop -> it.body.size * it.times
+    }
+}
+
+
+/** Flatten to the raw move sequence the runner walks. */
+private fun List<Instr>.expand(): List<Step> = flatMap { instr ->
+    when (instr) {
+        is Instr.Move -> listOf(instr.step)
+        is Instr.Loop -> (0 until instr.times).flatMap { instr.body }
+    }
+}
 
 /** Bucket id under which the code-puzzle's cleared levels are persisted. */
 private const val CODE_BUCKET = "code.levels"
@@ -213,7 +236,12 @@ private fun LevelPlay(
     val progress = LocalProgressStore.current
     val level = LEVELS[levelIndex]
 
-    var program by remember { mutableStateOf<List<Step>>(emptyList()) }
+    var program by remember { mutableStateOf<List<Instr>>(emptyList()) }
+
+    // null = normal mode. Non-null = a loop is open; arrows drop into this buffer.
+    var openLoop by remember { mutableStateOf<List<Step>?>(null) }
+    var loopTimes by remember { mutableStateOf(2) }   // ×N for the open loop, 2..4
+
     var robot by remember { mutableStateOf(level.start) }
     var running by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("Plan the robot's path to the star!") }
@@ -221,6 +249,8 @@ private fun LevelPlay(
 
     fun resetLevel() {
         program = emptyList()
+        openLoop = null
+        loopTimes = 2
         robot = level.start
         running = false
         message = "Plan the robot's path to the star!"
@@ -233,7 +263,7 @@ private fun LevelPlay(
     LaunchedEffect(running) {
         if (!running) return@LaunchedEffect
         robot = level.start
-        for (step in program) {
+        for (step in program.expand()) {
             delay(400)
             var (x, y) = robot
             when (step) {
@@ -263,17 +293,56 @@ private fun LevelPlay(
         }
     }
 
+    fun wouldExceed() : Boolean {
+        val open = openLoop
+        val projected = if (open != null)
+            program.moveCount() + (open.size + 1) * loopTimes
+        else
+            program.moveCount() + 1
+        return projected > level.maxMoves
+    }
     val onStep: (Step) -> Unit = { step ->
         if (!running) {
-            if (program.size < level.maxMoves) {
-                program = program + step
-            } else {
-                message = "That's the most steps for this level. Tap Undo or Run."
+           if (wouldExceed()) {
+                message = "You cannot add any more steps!"
+           } else {
+                val open = openLoop
+                if (open != null) openLoop = open + step
+                else program = program + Instr.Move(step)
+           }
+        }
+    }
+    // Close the loop: commit it (if it has a body), else cancel.
+    val onDone = {
+        if (!running) {
+            val open = openLoop
+            if (!open.isNullOrEmpty()) program = program + Instr.Loop(open, loopTimes)
+            openLoop = null
+        }
+    }
+
+    // Enter bracket mode: start an empty loop body.
+    val onRepeat = { if (!running && openLoop == null) { openLoop = emptyList(); loopTimes = 2 } }
+
+    // Set the ×N repeat count for the loop being built.
+    val onTimes: (Int) -> Unit = { n -> if (!running && openLoop != null) loopTimes = n.coerceIn(2, 4) }
+
+    val onUndo = {
+        if (!running) {
+            val open = openLoop
+            when {
+                open != null && open.isNotEmpty() -> openLoop = open.dropLast(1)
+                open != null                      -> openLoop = null            // cancel empty loop
+                program.isNotEmpty()              -> program = program.dropLast(1)
             }
         }
     }
-    val onUndo = { if (!running && program.isNotEmpty()) program = program.dropLast(1) }
-    val onRun = { if (!running && program.isNotEmpty()) running = true }
+
+    // Block Run while a loop is still open — force them to close it first.
+    val onRun = {
+        if (!running && openLoop == null && program.isNotEmpty()) running = true
+        else if (openLoop != null) message = "Tap Done to finish your loop first."
+    }
 
     Box(
         modifier = Modifier
@@ -330,8 +399,18 @@ private fun LevelPlay(
                                 .verticalScroll(rememberScrollState()),
                         ) {
                             MessageText(message)
-                            ProgramBar(program = program, maxMoves = level.maxMoves)
-                            Controls(running = running, onStep = onStep, onUndo = onUndo, onRun = onRun)
+                            ProgramBar(program = program, openLoop = openLoop, loopTimes = loopTimes, maxMoves = level.maxMoves)
+                            Controls(
+                                running = running,
+                                inLoop = openLoop != null,
+                                loopTimes = loopTimes,
+                                onStep = onStep,
+                                onUndo = onUndo,
+                                onRun = onRun,
+                                onRepeat = onRepeat,
+                                onDone = onDone,
+                                onTimes = onTimes,
+                            )
                         }
                     }
                 } else {
@@ -345,8 +424,18 @@ private fun LevelPlay(
                     ) {
                         MessageText(message)
                         Grid(level = level, robot = robot, side = cell)
-                        ProgramBar(program = program, maxMoves = level.maxMoves)
-                        Controls(running = running, onStep = onStep, onUndo = onUndo, onRun = onRun)
+                        ProgramBar(program = program, openLoop = openLoop, loopTimes = loopTimes, maxMoves = level.maxMoves)
+                        Controls(
+                            running = running,
+                            inLoop = openLoop != null,
+                            loopTimes = loopTimes,
+                            onStep = onStep,
+                            onUndo = onUndo,
+                            onRun = onRun,
+                            onRepeat = onRepeat,
+                            onDone = onDone,
+                            onTimes = onTimes,
+                        )
                     }
                 }
             }
@@ -408,7 +497,7 @@ private fun Grid(level: Level, robot: Pair<Int, Int>, side: Dp = 60.dp) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProgramBar(program: List<Step>, maxMoves: Int) {
+private fun ProgramBar(program: List<Instr>, openLoop: List<Step>?, loopTimes: Int, maxMoves: Int) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
@@ -419,15 +508,15 @@ private fun ProgramBar(program: List<Step>, maxMoves: Int) {
             .background(Color.White)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        // A step counter so the child sees how many moves they've used and the
-        // cap for this level.
+        // A step counter of executed moves (loops expanded) so the child sees
+        // how many moves they've used and the cap for this level.
         Text(
-            "Steps ${program.size} / $maxMoves",
+            "Steps ${program.moveCount()} / $maxMoves",
             color = Theme.Ink.copy(alpha = 0.55f),
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
-        if (program.isEmpty()) {
+        if (program.isEmpty() && openLoop == null) {
             Text("Your steps appear here", color = Theme.Ink.copy(alpha = 0.4f), fontSize = 16.sp, fontWeight = FontWeight.Medium)
         } else {
             // FlowRow wraps onto extra lines so every queued move stays visible,
@@ -437,18 +526,59 @@ private fun ProgramBar(program: List<Step>, maxMoves: Int) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                program.forEach { step ->
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Theme.Blue),
-                    ) {
-                        Text(step.glyph, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+                program.forEach { instr ->
+                    when (instr) {
+                        is Instr.Move -> MoveTile(instr.step)
+                        is Instr.Loop -> LoopTile(instr.body, instr.times, Theme.Purple)
                     }
                 }
+                // The loop currently being built, highlighted in orange as
+                // "in progress" so it's clear where new arrows are landing.
+                if (openLoop != null) LoopTile(openLoop, loopTimes, Theme.Orange)
             }
+        }
+    }
+}
+
+/** A single move as a blue rounded glyph tile. */
+@Composable
+private fun MoveTile(step: Step) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Theme.Blue),
+    ) {
+        Text(step.glyph, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+/** A loop rendered as a bracketed container: its body moves in a row, tinted with
+ *  [color], plus a ×N badge. An empty body (a loop still being built) shows a dash. */
+@Composable
+private fun LoopTile(body: List<Step>, times: Int, color: Color) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.18f))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        if (body.isEmpty()) {
+            Text("…", color = color, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+        } else {
+            body.forEach { MoveTile(it) }
+        }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(color)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        ) {
+            Text("×$times", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
         }
     }
 }
@@ -456,9 +586,14 @@ private fun ProgramBar(program: List<Step>, maxMoves: Int) {
 @Composable
 private fun Controls(
     running: Boolean,
+    inLoop: Boolean,
+    loopTimes: Int,
     onStep: (Step) -> Unit,
     onUndo: () -> Unit,
     onRun: () -> Unit,
+    onRepeat: () -> Unit,
+    onDone: () -> Unit,
+    onTimes: (Int) -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -479,9 +614,37 @@ private fun Controls(
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            KidButton(title = "Undo", icon = Icons.AutoMirrored.Filled.Undo, color = Theme.Ink.copy(alpha = 0.5f), onClick = onUndo)
-            KidButton(title = "Run", icon = Icons.Filled.PlayArrow, color = Theme.Green, onClick = onRun)
+        // While a loop is open, offer ×2/×3/×4 chips for its repeat count.
+        if (inLoop) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(2, 3, 4).forEach { n ->
+                    val selected = n == loopTimes
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(if (selected) Theme.Orange else Theme.Ink.copy(alpha = 0.15f))
+                            .clickable(enabled = !running) { onTimes(n) },
+                    ) {
+                        Text(
+                            "×$n",
+                            color = if (selected) Color.White else Theme.Ink,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
+                }
+            }
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (inLoop) {
+                KidButton(title = "Done", icon = Icons.Filled.Check, color = Theme.Green, onClick = onDone)
+            } else {
+                KidButton(title = "Repeat", color = Theme.Purple, onClick = onRepeat)
+            }
+            KidButton(title = "Undo", icon = Icons.AutoMirrored.Filled.Undo, color = Theme.Ink.copy(alpha = 0.5f), onClick = onUndo)
+        }
+        KidButton(title = "Run", icon = Icons.Filled.PlayArrow, color = Theme.Green, onClick = onRun)
     }
 }
