@@ -258,6 +258,8 @@ private fun StageHost(index: Int, store: PhonicsStore, speak: (String) -> Unit, 
                         PhonicsKind.BUILD -> BuildWordGame(stage.build, stage.color, speak, playPhoneme, onProgress, ::finish)
                         PhonicsKind.RHYME -> RhymeGame(stage.rhyme, stage.color, speak, onProgress, ::finish)
                         PhonicsKind.LISTEN -> ListenFindGame(stage.listen, stage.color, speak, onProgress, ::finish)
+                        PhonicsKind.BLEND -> BlendGame(stage.blend, stage.color, speak, playPhoneme, onProgress, ::finish)
+                        PhonicsKind.DIGRAPH -> DigraphGame(stage.digraph, stage.color, speak, playPhoneme, onProgress, ::finish)
                     }
                 }
             }

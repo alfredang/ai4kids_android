@@ -631,3 +631,247 @@ fun ListenFindGame(
         )
     }
 }
+
+/* ----------------------------- Sound Blender ----------------------------- */
+
+@Composable
+fun BlendGame(
+    rounds: List<BlendRound>,
+    color: Color,
+    speak: (String) -> Unit,
+    playPhoneme: (String) -> Unit,
+    onProgress: (Int, Int) -> Unit,
+    onFinish: (Int) -> Unit,
+) {
+    var index by remember { mutableIntStateOf(0) }
+    var mistakes by remember { mutableIntStateOf(0) }
+    var wrong by remember { mutableStateOf<Int?>(null) }
+    var solved by remember(index) { mutableStateOf(false) }
+    // Bumped by the "Blend it" button to replay; reset each round so the first
+    // auto-play (tick 0) gets its gentle lead-in delay.
+    var blendTick by remember(index) { mutableIntStateOf(0) }
+    val round = rounds[index]
+    val order = remember(index) { round.options.indices.shuffled() }
+    val isLast = index + 1 >= rounds.size
+    val sounds = remember(index) { round.sounds.filter { it.isNotEmpty() } }
+
+    LaunchedEffect(index) { onProgress(index, rounds.size) }
+    // Play the sounds in order on entry and on each "Blend it". Keying on index
+    // cancels a stale blend if the child advances mid-playback.
+    LaunchedEffect(index, blendTick) {
+        delay(if (blendTick == 0) 350 else 0)
+        sounds.forEach { slug -> playPhoneme(slug); delay(650) }
+    }
+    LaunchedEffect(wrong) { if (wrong != null) { delay(1300); wrong = null } }
+
+    fun pick(orig: Int) {
+        if (wrong != null || solved) return
+        if (orig == round.answer) {
+            speak(round.options[orig].second)
+            solved = true
+        } else {
+            wrong = orig; mistakes += 1
+        }
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            "Blend the sounds, then tap the picture!",
+            color = Theme.Ink.copy(alpha = 0.7f),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
+        // Tap a dot to hear that sound alone, or "Blend it" to hear them together.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth().kidCard().padding(20.dp),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)) {
+                sounds.forEachIndexed { i, slug ->
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .softShadow(CircleShape)
+                            .clip(CircleShape)
+                            .background(color.copy(alpha = 0.15f))
+                            .clickable { playPhoneme(slug) },
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = "Sound ${i + 1}",
+                            tint = color,
+                            modifier = Modifier.size(26.dp),
+                        )
+                    }
+                }
+            }
+            KidButton(title = "Blend it! 🔊", color = color, onClick = { blendTick += 1 })
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
+            order.forEach { orig ->
+                val (emoji, word) = round.options[orig]
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .width(100.dp)
+                        .softShadow(RoundedCornerShape(18.dp))
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(if (wrong == orig) Theme.Red.copy(alpha = 0.18f) else Color.White)
+                        .clickable { pick(orig) }
+                        .padding(vertical = 16.dp),
+                ) {
+                    Text(emoji, fontSize = 44.sp)
+                    Text(word, color = Theme.Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        RoundFeedback(solved = solved, showWrong = wrong != null, isLast = isLast, color = color) {
+            if (isLast) onFinish(mistakes) else index += 1
+        }
+        PhonicsBuddy(
+            promptKey = "blend-${round.word}",
+            prompt = "You are a cheerful phonics tutor for a 5-year-old. In ONE short sentence (max 15 words, simple words), give a fun clue about the word \"${round.word}\" so they can pick it, without saying the word. Be playful. No emojis.",
+            color = color,
+            speak = speak,
+        )
+    }
+}
+
+/* --------------------------- Buddy Sounds (digraphs) --------------------------- */
+
+/** The res/raw clip for a two-letter team. */
+private fun slugForTeam(team: String): String = when (team) {
+    "sh" -> "c_sh"
+    "ch" -> "c_ch"
+    "th" -> "c_th_unvoiced"
+    "ng" -> "c_ng"
+    else -> ""
+}
+
+@Composable
+fun DigraphGame(
+    rounds: List<DigraphRound>,
+    color: Color,
+    speak: (String) -> Unit,
+    playPhoneme: (String) -> Unit,
+    onProgress: (Int, Int) -> Unit,
+    onFinish: (Int) -> Unit,
+) {
+    var index by remember { mutableIntStateOf(0) }
+    var mistakes by remember { mutableIntStateOf(0) }
+    var wrong by remember { mutableStateOf<Int?>(null) }
+    var solved by remember(index) { mutableStateOf(false) }
+    val round = rounds[index]
+    val order = remember(index) { round.teams.indices.shuffled() }
+    val isLast = index + 1 >= rounds.size
+
+    LaunchedEffect(index) {
+        onProgress(index, rounds.size)
+        delay(350)
+        playPhoneme(round.sound)
+    }
+    LaunchedEffect(wrong) { if (wrong != null) { delay(1300); wrong = null } }
+
+    fun pick(orig: Int) {
+        if (wrong != null || solved) return
+        if (orig == round.answer) {
+            speak(round.exampleWord)
+            solved = true
+        } else {
+            wrong = orig; mistakes += 1
+        }
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            "Which two letters make this sound?",
+            color = Theme.Ink.copy(alpha = 0.7f),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
+        // Big listen button for the target digraph sound (no word — the child must
+        // map the sound to its two-letter spelling).
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth().kidCard().padding(24.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(96.dp)
+                    .softShadow(CircleShape)
+                    .clip(CircleShape)
+                    .background(color)
+                    .clickable { playPhoneme(round.sound) },
+            ) {
+                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear the sound", tint = Color.White, modifier = Modifier.size(48.dp))
+            }
+            Text("Tap to hear again", color = Theme.Ink.copy(alpha = 0.5f), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            // On a win, reinforce: the two letters → a word that uses them.
+            if (solved) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(round.teams[round.answer], color = color, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                    Text("→", color = Theme.Ink.copy(alpha = 0.5f), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Text(round.exampleEmoji, fontSize = 30.sp)
+                    Text(round.exampleWord, color = Theme.Ink, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                }
+            }
+        }
+        // Letter-team choices; a small speaker on each lets the child compare.
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
+            order.forEach { orig ->
+                val team = round.teams[orig]
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .width(96.dp)
+                        .softShadow(RoundedCornerShape(18.dp))
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(if (wrong == orig) Theme.Red.copy(alpha = 0.18f) else Color.White)
+                        .clickable { pick(orig) }
+                        .padding(vertical = 16.dp),
+                ) {
+                    Text(team, color = Theme.Ink, fontSize = 32.sp, fontWeight = FontWeight.Black)
+                    // Nested clickable consumes the tap, so hearing doesn't also pick.
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(color.copy(alpha = 0.15f))
+                            .clickable { playPhoneme(slugForTeam(team)) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear $team", tint = color, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
+        RoundFeedback(solved = solved, showWrong = wrong != null, isLast = isLast, color = color) {
+            if (isLast) onFinish(mistakes) else index += 1
+        }
+        PhonicsBuddy(
+            promptKey = "digraph-${round.exampleWord}",
+            prompt = "You are a cheerful phonics tutor for a 5-year-old. In ONE short sentence (max 15 words, simple words), remind them that the two letters \"${round.teams[round.answer]}\" make ONE sound, like in \"${round.exampleWord}\". Be warm. No emojis.",
+            color = color,
+            speak = speak,
+        )
+    }
+}
