@@ -329,6 +329,7 @@ fun BuildWordGame(
     rounds: List<BuildRound>,
     color: Color,
     speak: (String) -> Unit,
+    playPhoneme: (String) -> Unit,
     onProgress: (Int, Int) -> Unit,
     onFinish: (Int) -> Unit,
 ) {
@@ -342,6 +343,7 @@ fun BuildWordGame(
     var wrongTile by remember { mutableStateOf<Int?>(null) }
     val built = target.take(used.size)
     val isLast = index + 1 >= rounds.size
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(index) {
         onProgress(index, rounds.size)
@@ -352,12 +354,27 @@ fun BuildWordGame(
 
     fun tap(i: Int, ch: Char) {
         if (i in used || wrongTile != null || solved) return
-        if (ch == target[built.length]) {
+        val pos = built.length
+        if (ch == target[pos]) {
             used = used + i
-            speak(ch.toString())
-            if (used.size == target.length) {
-                speak(target)
+            // Sound out this letter as it lands (silent letters play nothing).
+            val lastSound = round.sounds.getOrNull(pos)?.takeIf { it.isNotEmpty() }
+            if (used.size < target.length) {
+                lastSound?.let(playPhoneme)
+            } else {
                 solved = true
+                scope.launch {
+                    // Let the final letter finish sounding before moving on, so it
+                    // isn't cut off by the blend that follows.
+                    lastSound?.let { playPhoneme(it); delay(800) }
+                    delay(250)
+                    // Blend the whole word: each sound in order, then the word.
+                    round.sounds.forEach { slug ->
+                        if (slug.isNotEmpty()) { playPhoneme(slug); delay(800) }
+                    }
+                    delay(150)
+                    speak(target)
+                }
             }
         } else {
             wrongTile = i; mistakes += 1

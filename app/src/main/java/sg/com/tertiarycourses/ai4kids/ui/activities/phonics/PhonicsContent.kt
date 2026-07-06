@@ -32,8 +32,15 @@ data class PopRound(
     val letter: Char,
 )
 
-/** "Build the Word" round: spell the word for the picture from letter tiles. */
-data class BuildRound(val emoji: String, val word: String)
+/** "Build the Word" round: build the word from letter tiles by *sound*. As each
+ *  correct letter lands, its phoneme clip plays (blending, not letter names);
+ *  [sounds] has one phoneme slug per letter of [word], with "" marking a silent
+ *  letter (e.g. the B in LAMB) — those play no sound, which teaches the silence. */
+data class BuildRound(val emoji: String, val word: String, val sounds: List<String>) {
+    init {
+        require(sounds.size == word.length) { "sounds must have one entry per letter in \"$word\"" }
+    }
+}
 
 /** "Rhyme Time" round: pick the option that rhymes with the target. */
 data class RhymeRound(
@@ -101,12 +108,14 @@ val PHONICS_STAGES: List<PhonicsStage> = listOf(
         emoji = "🌉",
         color = Theme.Orange,
         kind = PhonicsKind.BUILD,
+        // CVC words: one sound per letter, so tapping a tile sounds it out and a
+        // full build blends into the word (/k/-/æ/-/t/ → "cat").
         build = listOf(
-            BuildRound("🐱", "CAT"),
-            BuildRound("🐶", "DOG"),
-            BuildRound("☀️", "SUN"),
-            BuildRound("🎩", "HAT"),
-            BuildRound("🚌", "BUS"),
+            BuildRound("🐱", "CAT", listOf("c_k", "v_a_short", "c_t")),
+            BuildRound("🐶", "DOG", listOf("c_d", "v_o_short", "c_g")),
+            BuildRound("☀️", "SUN", listOf("c_s", "v_u_short", "c_n")),
+            BuildRound("🎩", "HAT", listOf("c_h", "v_a_short", "c_t")),
+            BuildRound("🚌", "BUS", listOf("c_b", "v_u_short", "c_s")),
         ),
     ),
     PhonicsStage(
@@ -116,12 +125,14 @@ val PHONICS_STAGES: List<PhonicsStage> = listOf(
         emoji = "🤫",
         color = Theme.Purple,
         kind = PhonicsKind.BUILD,
+        // "" marks a silent letter — it plays no sound, so the child hears which
+        // letters are silent while building the word.
         build = listOf(
-            BuildRound("🐑", "LAMB"),   // silent B
-            BuildRound("🔪", "KNIFE"),  // silent K
-            BuildRound("👻", "GHOST"),  // silent H
-            BuildRound("🏰", "CASTLE"), // silent T
-            BuildRound("✍️", "WRITE"),  // silent W
+            BuildRound("🐑", "LAMB", listOf("c_l", "v_a_short", "c_m", "")),        // silent B
+            BuildRound("🔪", "KNIFE", listOf("", "c_n", "d_ie", "c_f", "")),        // silent K, E
+            BuildRound("👻", "GHOST", listOf("c_g", "", "d_oa", "c_s", "c_t")),     // silent H
+            BuildRound("🏰", "CASTLE", listOf("c_k", "v_ar", "c_s", "", "c_l", "")),// silent T, E
+            BuildRound("✍️", "WRITE", listOf("", "c_r", "d_ie", "c_t", "")),        // silent W, E
         ),
     ),
     PhonicsStage(

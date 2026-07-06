@@ -255,7 +255,7 @@ private fun StageHost(index: Int, store: PhonicsStore, speak: (String) -> Unit, 
                     val onProgress: (Int, Int) -> Unit = { r, t -> round = r; total = t }
                     when (stage.kind) {
                         PhonicsKind.POP -> PopPhonemeGame(stage.pop, stage.color, speak, playPhoneme, onProgress, ::finish)
-                        PhonicsKind.BUILD -> BuildWordGame(stage.build, stage.color, speak, onProgress, ::finish)
+                        PhonicsKind.BUILD -> BuildWordGame(stage.build, stage.color, speak, playPhoneme, onProgress, ::finish)
                         PhonicsKind.RHYME -> RhymeGame(stage.rhyme, stage.color, speak, onProgress, ::finish)
                         PhonicsKind.LISTEN -> ListenFindGame(stage.listen, stage.color, speak, onProgress, ::finish)
                     }
