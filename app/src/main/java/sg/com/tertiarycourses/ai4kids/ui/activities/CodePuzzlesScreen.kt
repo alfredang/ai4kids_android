@@ -254,9 +254,12 @@ private fun LevelPlay(
             onCleared()
             showCelebration = true
         } else {
-            message = "Almost! Try a new plan. 🔁"
+            // Keep the plan so the child can debug it — tweak or Undo the last
+            // step and Run again — rather than re-entering everything. Just snap
+            // the robot back to the start ready for the next attempt.
+            message = "Almost! Tweak your steps and Run again. 🔁"
             delay(400)
-            resetLevel()
+            robot = level.start
         }
     }
 
