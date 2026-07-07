@@ -35,7 +35,10 @@ Kids earn ⭐️ stars for completing rounds, the home header keeps a running to
 The core learning activities are **offline-first** — no login, progress stored locally on
 the device. **Phonics Quest** (spoken "Buddy" hints) and **Story Builder** (freshly-written
 tales) can optionally call Google **Gemini** when an API key is set; both stay fully playable
-offline without it. The **Escape Room** is a top-down puzzle adventure (built with
+offline without it. Two more activities are **AI-powered** — **Talking Buddy** (chat by voice
+or text) and **Art Studio** (an AI-painted picture you turn into a jigsaw) — calling Gemini
+(with a Cloudflare image fallback) when a key is set, and showing a friendly "ask a grown-up"
+screen when it isn't. The **Escape Room** is a top-down puzzle adventure (built with
 LibGDX) you can play solo offline or **co-op** with friends over a room code. The **Brain
 Arcade** adds **online multiplayer card games**. Co-op Escape and the Brain Arcade need a
 sign-in and an internet connection; everything else works fully offline.
@@ -45,9 +48,11 @@ sign-in and an internet connection; everything else works fully offline.
 | Activity | Ages | What it does | Connectivity |
 | --- | --- | --- | --- |
 | 🔤 **Phonics Quest** | 4–6 | An adventure map of phonics "worlds" — listen to sounds, build words, find rhymes; spoken with on-device TextToSpeech | Offline (+ optional AI) |
-| 📖 **Story Builder** | 7–9 | Pick a hero, a place & a magic item; the app weaves a short illustrated story | Offline |
-| 🧩 **Code Puzzles** | 10–12 | Sequence arrow steps to walk a robot 🤖 to the star ⭐️ (algorithmic thinking) | Offline |
+| 📖 **Story Builder** | 7–9 | Pick a hero, a place & a magic item; the app weaves a short illustrated story | Offline (+ optional AI) |
+| 🧩 **Code Puzzles** | 7–12 | Sequence arrow steps to walk a robot 🤖 to the star ⭐️ (algorithmic thinking) | Offline |
 | 🚪 **Escape Room** | 7–12 | Walk a top-down room, solve a chain of mini-puzzles and escape; five themed rooms, solo or co-op | Offline (solo) · Online (co-op) |
+| 💬 **Talking Buddy** | 5–10 | Chat with a friendly AI pal by voice or text; speech-in and spoken replies happen on-device | Online AI (key required) |
+| 🎨 **Art Studio** | 5–12 | Describe a picture, let AI paint it, then turn the picture into a jigsaw | Online AI (key required) |
 | 🧠 **Brain Arcade** | All | Ten **card games** — play solo, co-op, or versus friends | Online |
 
 ### Phonics Quest — the five worlds
@@ -106,12 +111,12 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
 | Category | Technology |
 | --- | --- |
 | **Language** | Kotlin 2.0.21 |
-| **UI** | Jetpack Compose + Material 3 (Compose BOM 2024.09.03) |
+| **UI** | Jetpack Compose + Material 3 (Compose BOM 2024.12.01) |
 | **Game engine** | LibGDX 1.13.1 (the Escape Room — a self-contained `AndroidApplication`) |
 | **Architecture** | Single-Activity Compose home; the Escape Room runs as a separate LibGDX `Activity`; shared state via `CompositionLocal` |
 | **Audio** | Android `TextToSpeech` (on-device, offline) for Phonics |
-| **AI (optional)** | Google Gemini API (`gemini-2.5-flash`) for the Phonics Buddy |
-| **Networking** | OkHttp 4.12.0 (Brain Arcade + optional Phonics AI) |
+| **AI (optional)** | Google **Gemini** (`gemini-2.5-flash` text; "Nano Banana" image) with a **Cloudflare** Workers AI (Flux) image fallback — Phonics Buddy, Story Builder, Talking Buddy & Art Studio |
+| **Networking** | OkHttp 4.12.0 (Brain Arcade, co-op Escape, and the optional AI activities) |
 | **Auth** | NextAuth credentials flow, session cookie persisted locally |
 | **Persistence** | `SharedPreferences` (activity + phonics stars, best times, session cookie) |
 | **Build** | Gradle (Kotlin DSL), Android Gradle Plugin 8.5.2 |
@@ -121,14 +126,14 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                        MainActivity                            │
-│   enableEdgeToEdge · CardApi.init · provides ProgressStore     │
+│                        MainActivity                          │
+│   enableEdgeToEdge · CardApi.init · provides ProgressStore   │
 └───────────────────────────────┬──────────────────────────────┘
                                  │
                           ┌──────▼───────┐
                           │  RootScreen  │  home grid + star total
                           └──────┬───────┘
-       ┌──────────┬──────────┬───┴──────┬─────────────┬──────────────┐
+       ┌──────────┬──────────┬───┴──────┬─────────────┬───────────
        ▼          ▼          ▼          ▼             ▼
  ┌──────────┐┌──────────┐┌──────────┐┌───────────┐┌──────────────┐
  │ Phonics  ││  Story   ││   Code   ││  Escape   ││ Brain Arcade │
@@ -137,9 +142,9 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
    offline activities award stars          │ co-op       │
    via ProgressStore                       ▼             ▼
                                     ┌──────────────────────────────┐
-                                    │     EscapeApi  /  CardApi      │
-                                    │    OkHttp + cookie session     │
-                                    └───────────────┬───────────────┘
+                                    │     EscapeApi  /  CardApi    │
+                                    │    OkHttp + cookie session   │
+                                    └───────────────┬──────────────┘
                                                     │ HTTPS
                                                     ▼
                                   ai4kids Next.js backend (NextAuth ·
@@ -155,7 +160,9 @@ app/src/main/java/sg/com/tertiarycourses/ai4kids/
 ├── model/Activity.kt            # The home activities (title, color, age band, icon)
 ├── data/ProgressStore.kt        # Local star tally, persisted to SharedPreferences
 ├── ai/
-│   └── GeminiClient.kt          # Optional Gemini calls for the Phonics Buddy
+│   ├── GeminiClient.kt          # Gemini text/JSON/chat/image (Phonics, Story, Buddy, Art)
+│   ├── CloudflareClient.kt      # Cloudflare Workers AI (Flux) image fallback
+│   └── ArtEngine.kt             # Art Studio safety-gate + image generate orchestrator
 ├── ui/
 │   ├── theme/Theme.kt           # Brand palette, shapes, shadows, background gradient
 │   ├── RootScreen.kt            # Home grid of activity cards + Brain Arcade tile
@@ -164,10 +171,18 @@ app/src/main/java/sg/com/tertiarycourses/ai4kids/
 │   └── activities/
 │       ├── StoryBuilderScreen.kt
 │       ├── CodePuzzlesScreen.kt
-│       └── phonics/             # Phonics Quest
-│           ├── PhonicsContent.kt   # 5 worlds + per-stage star store
-│           ├── PhonicsGames.kt     # Mini-games + TextToSpeech speaker + Gemini Buddy
-│           └── PhonicsScreen.kt    # Adventure map + stage host
+│       ├── phonics/             # Phonics Quest
+│       │   ├── PhonicsContent.kt   # 5 worlds + per-stage star store
+│       │   ├── PhonicsGames.kt     # Mini-games + TextToSpeech speaker + Gemini Buddy
+│       │   ├── PhonemeAudio.kt     # Bundled isolated-phoneme audio player
+│       │   └── PhonicsScreen.kt    # Adventure map + stage host
+│       ├── buddy/               # Talking Buddy — AI chat (voice/text)
+│       │   ├── TalkingBuddyScreen.kt
+│       │   ├── BuddyFace.kt        # Animated Canvas face
+│       │   └── BuddyVoice.kt       # On-device TextToSpeech
+│       └── art/                 # Art Studio — AI paint → jigsaw
+│           ├── ArtStudioScreen.kt
+│           └── JigsawBoard.kt
 ├── cards/                       # Online "Brain Arcade" card games
 │   ├── CardApi.kt               # OkHttp client: NextAuth login + card endpoints
 │   ├── CardGameMeta.kt          # Catalogue of the ten games + modes
@@ -242,9 +257,16 @@ Leave it blank and the phonics games still work fully offline (just without the 
   ingredients (hero, place, item, mood) to write a story, and Phonics Quest's **"Buddy"**
   sends a short prompt for a hint when the child taps "Ask Buddy". With no key, both run
   fully on-device.
+- **Talking Buddy** and **Art Studio** are AI activities: with a key set they send the
+  child's typed/spoken message or drawing prompt to Google **Gemini** (and, for the image
+  fallback, **Cloudflare** Workers AI). Talking Buddy uses Android's **`SpeechRecognizer`**
+  for speech input (which may send audio to Google for recognition — we pass
+  `EXTRA_PREFER_OFFLINE`) and on-device `TextToSpeech` for replies. With no key they stay
+  dormant behind an "ask a grown-up" screen.
 - `INTERNET` / `ACCESS_NETWORK_STATE` permissions are used by Brain Arcade's online card
-  games, **co-op** Escape rooms, and the optional Gemini features (Story Builder + Phonics
-  Buddy).
+  games, **co-op** Escape rooms, and the AI activities (Story Builder, Phonics Buddy,
+  Talking Buddy, Art Studio). `RECORD_AUDIO` is used **only** by Talking Buddy, for
+  on-device speech input.
 - The only persisted data is local: star progress, solo best times, and (when signed in)
   the online session cookie — stored **encrypted** (Android Keystore) and excluded from
   backup/transfer.
