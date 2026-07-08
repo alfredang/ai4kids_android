@@ -56,46 +56,6 @@ import sg.com.tertiarycourses.ai4kids.ui.components.StarBadge
 import sg.com.tertiarycourses.ai4kids.ui.components.softShadow
 import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
 
-private enum class Step(val glyph: String) { UP("↑"), DOWN("↓"), LEFT("←"), RIGHT("→") }
-
-private data class Level(
-    val size: Int,
-    val start: Pair<Int, Int>,
-    val goal: Pair<Int, Int>,
-    val walls: Set<Pair<Int, Int>>,
-    /** Most steps the child may queue — keeps the plan short and forces them to
-     *  think about an efficient route rather than spamming arrows. */
-    val maxMoves: Int,
-)
-
-private val LEVELS = listOf(
-    Level(4, 0 to 0, 3 to 0, emptySet(), maxMoves = 6),
-    Level(4, 0 to 3, 3 to 0, setOf(2 to 2, 2 to 1), maxMoves = 10),
-    Level(5, 0 to 0, 4 to 4, setOf(2 to 2, 3 to 2, 1 to 3), maxMoves = 14),
-)
-
-private sealed interface Instr {
-    data class Move(val step: Step) : Instr
-    data class Loop(val body: List<Step>, val times: Int) : Instr 
-}
-
-/** How many grid moves this program actually executes (loops expanded). */
-private fun List<Instr>.moveCount(): Int = sumOf {
-    when (it) {
-        is Instr.Move -> 1
-        is Instr.Loop -> it.body.size * it.times
-    }
-}
-
-
-/** Flatten to the raw move sequence the runner walks. */
-private fun List<Instr>.expand(): List<Step> = flatMap { instr ->
-    when (instr) {
-        is Instr.Move -> listOf(instr.step)
-        is Instr.Loop -> (0 until instr.times).flatMap { instr.body }
-    }
-}
-
 /** Bucket id under which the code-puzzle's cleared levels are persisted. */
 private const val CODE_BUCKET = "code.levels"
 
@@ -263,19 +223,9 @@ private fun LevelPlay(
     LaunchedEffect(running) {
         if (!running) return@LaunchedEffect
         robot = level.start
-        for (step in program.expand()) {
+        for (dir in program.expand()) {
             delay(400)
-            var (x, y) = robot
-            when (step) {
-                Step.UP -> y += 1
-                Step.DOWN -> y -= 1
-                Step.LEFT -> x -= 1
-                Step.RIGHT -> x += 1
-            }
-            // Clamp to grid and respect walls (illegal move = stay put).
-            if (x in 0 until level.size && y in 0 until level.size && (x to y) !in level.walls) {
-                robot = x to y
-            }
+            robot = level.step(robot, dir) // clamps to the grid, refuses walls
         }
         delay(400)
         running = false

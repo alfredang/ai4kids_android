@@ -32,8 +32,8 @@ enum class Activity(
 ) {
     PHONICS(
         id = "phonics",
-        title = "Phonics Playground",
-        subtitle = "Match letters & sounds",
+        title = "Phonics Quest",
+        subtitle = "Explore the sound worlds",
         color = Theme.Pink,
         ageBand = "Ages 4–6",
         icon = Icons.Filled.TextFields,
