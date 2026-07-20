@@ -1,7 +1,10 @@
 package sg.com.tertiarycourses.ai4kids.ui.activities.phonics
 
-import android.speech.tts.TextToSpeech
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,15 +34,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.Locale
+import kotlinx.coroutines.withTimeoutOrNull
 import sg.com.tertiarycourses.ai4kids.ai.GeminiClient
 import sg.com.tertiarycourses.ai4kids.ui.components.KidButton
 import sg.com.tertiarycourses.ai4kids.ui.components.kidCard
@@ -47,45 +50,22 @@ import sg.com.tertiarycourses.ai4kids.ui.components.softShadow
 import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
 
 /**
- * On-device speech for hearing letters, sounds and words. Uses the Android
- * TextToSpeech engine — works offline once a voice is installed, no network.
- * Returns a `speak` function; silently no-ops if TTS isn't ready/available.
+ * The Phonics Quest mini-games. Mirrors the web app's `PhonicsQuest.tsx`, which
+ * is the source of truth for the quest's behaviour — the Android Buddy differs by
+ * calling Gemini on-device rather than the web's `/api/learn/phonics-buddy`, and
+ * the star tally stays local (see `PhonicsStore`).
  */
-@Composable
-fun rememberSpeaker(): (String) -> Unit {
-    val context = LocalContext.current
-    var engine by remember { mutableStateOf<TextToSpeech?>(null) }
-    var ready by remember { mutableStateOf(false) }
 
-    DisposableEffect(Unit) {
-        var tts: TextToSpeech? = null
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val e = tts ?: return@TextToSpeech
-                // Use whichever English voice is actually installed; an emulator
-                // may have none, in which case speech stays silent (no crash).
-                val available = listOf(Locale.UK, Locale.US, Locale.ENGLISH, Locale.getDefault())
-                    .any { loc ->
-                        val r = e.setLanguage(loc)
-                        r == TextToSpeech.LANG_AVAILABLE ||
-                            r == TextToSpeech.LANG_COUNTRY_AVAILABLE ||
-                            r == TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE
-                    }
-                e.setSpeechRate(0.85f)
-                ready = available
-            }
-        }
-        engine = tts
-        onDispose {
-            tts?.stop()
-            tts?.shutdown()
-        }
-    }
+/** Silence held after the last letter finishes, before the word is blended — it
+ *  separates "that was the last sound" from "now here's the whole word". Timed
+ *  from the end of the clip (see [PhonicsAudio.play]), so it is real silence. */
+private const val BLEND_LEAD_IN = 600L
 
-    return remember {
-        { text: String -> if (ready) engine?.speak(text, TextToSpeech.QUEUE_FLUSH, null, text) }
-    }
-}
+/** Silence *between* sounds in a sound-out, held AFTER each clip has fully played.
+ *  Timing from the clip's end rather than a fixed gap keeps the cadence smooth at
+ *  any `PHONEME_RATE` — a fixed gap shorter than a slowed clip chops each sound
+ *  off partway and sounds choppy. */
+private const val BLEND_SOUND_GAP = 50L
 
 /** Small white "hear it" pill that re-speaks the current word. */
 @Composable
@@ -138,14 +118,39 @@ private fun RoundFeedback(
     }
 }
 
+/** How long to wait for the AI hint before showing a generic one instead. The
+ *  Buddy is usually ~1s, but a slow or rate-limited Gemini can take far longer —
+ *  a child shouldn't sit watching "Thinking…" that long. */
+private const val HINT_TIMEOUT_MS = 3500L
+
+/** A canned, answer-safe hint per game, used when the AI Buddy is too slow or
+ *  errors. Never names a specific word, so it can't give a round away. */
+private fun genericHint(game: PhonicsKind): String = when (game) {
+    PhonicsKind.POP -> "Say the word slowly and listen to its very first sound!"
+    PhonicsKind.BUILD -> "Sound out each letter, then push them together!"
+    PhonicsKind.RHYME -> "Listen to the ending sound and find one that matches!"
+    PhonicsKind.LISTEN -> "Listen carefully and pick the word that sounds just right!"
+    PhonicsKind.BLEND -> "Blend the sounds together slowly to hear the word!"
+    PhonicsKind.DIGRAPH -> "Two letters can team up to make one brand-new sound!"
+}
+
 /**
  * The Gemini-powered "Phonics Buddy": a button that asks Gemini for a short,
  * kid-friendly hint about the current round and reads it aloud. Hidden entirely
  * when no API key is configured (the games stay fully playable without it).
  * [promptKey] resets the hint when the round changes.
+ *
+ * The hint races a [HINT_TIMEOUT_MS] timeout into [genericHint], so a slow model
+ * never leaves a child waiting — whichever lands first is shown *and* spoken.
  */
 @Composable
-private fun PhonicsBuddy(promptKey: String, prompt: String, color: Color, speak: (String) -> Unit) {
+private fun PhonicsBuddy(
+    promptKey: String,
+    prompt: String,
+    game: PhonicsKind,
+    color: Color,
+    audio: PhonicsAudio,
+) {
     if (!GeminiClient.isConfigured()) return
     var hint by remember(promptKey) { mutableStateOf<String?>(null) }
     var busy by remember(promptKey) { mutableStateOf(false) }
@@ -166,14 +171,13 @@ private fun PhonicsBuddy(promptKey: String, prompt: String, color: Color, speak:
                 .clickable(enabled = !busy) {
                     scope.launch {
                         busy = true
-                        val reply = GeminiClient.generate(prompt, model = GeminiClient.FLASH_LITE)
-                        busy = false
-                        if (reply != null) {
-                            hint = reply
-                            speak(reply)
-                        } else {
-                            hint = "Listen to the word again and sound it out slowly!"
+                        val reply = withTimeoutOrNull(HINT_TIMEOUT_MS) {
+                            GeminiClient.generate(prompt, model = GeminiClient.FLASH_LITE)
                         }
+                        val msg = reply ?: genericHint(game)
+                        busy = false
+                        hint = msg
+                        audio.speak(msg)
                     }
                 }
                 .padding(horizontal = 18.dp, vertical = 9.dp),
@@ -203,8 +207,7 @@ private fun PhonicsBuddy(promptKey: String, prompt: String, color: Color, speak:
 fun PopPhonemeGame(
     rounds: List<PopRound>,
     color: Color,
-    speak: (String) -> Unit,
-    playPhoneme: (String) -> Unit,
+    audio: PhonicsAudio,
     onProgress: (Int, Int) -> Unit,
     onFinish: (Int) -> Unit,
 ) {
@@ -215,11 +218,12 @@ fun PopPhonemeGame(
     val round = rounds[index]
     val options = remember(index) { round.options.shuffled() }
     val isLast = index + 1 >= rounds.size
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(index) {
         onProgress(index, rounds.size)
         delay(250)
-        speak(round.word)
+        audio.speak(round.word)
     }
     LaunchedEffect(wrong) { if (wrong != null) { delay(1300); wrong = null } }
 
@@ -241,7 +245,7 @@ fun PopPhonemeGame(
         ) {
             Text(round.emoji, fontSize = 84.sp)
             Text(round.word, color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
-            HearButton(onClick = { speak(round.word) }, color = color)
+            HearButton(onClick = { audio.speak(round.word) }, color = color)
         }
         Text(
             "Hear each sound, then pick the one it starts with!",
@@ -256,7 +260,7 @@ fun PopPhonemeGame(
                     number = i + 1,
                     isWrong = wrong == i,
                     color = color,
-                    onHear = { playPhoneme(slug) },
+                    onHear = { scope.launch { audio.play(slug) } },
                     onPick = { pick(i) },
                 )
             }
@@ -267,8 +271,9 @@ fun PopPhonemeGame(
         PhonicsBuddy(
             promptKey = "pop-${round.word}",
             prompt = "You are a cheerful phonics tutor for a 5-year-old child. In ONE short sentence (max 15 words, simple words), help them hear that the word \"${round.word}\" starts with the letter \"${round.letter}\". Be warm and playful. No emojis.",
+            game = PhonicsKind.POP,
             color = color,
-            speak = speak,
+            audio = audio,
         )
     }
 }
@@ -328,8 +333,7 @@ private fun NumberedSoundOption(
 fun BuildWordGame(
     rounds: List<BuildRound>,
     color: Color,
-    speak: (String) -> Unit,
-    playPhoneme: (String) -> Unit,
+    audio: PhonicsAudio,
     onProgress: (Int, Int) -> Unit,
     onFinish: (Int) -> Unit,
 ) {
@@ -341,44 +345,63 @@ fun BuildWordGame(
     val tiles = remember(index) { target.toList().shuffled() }
     var used by remember(index) { mutableStateOf(setOf<Int>()) }
     var wrongTile by remember { mutableStateOf<Int?>(null) }
+    // The tile tapped once — armed so a child can hear it, then tap again to place.
+    var pending by remember(index) { mutableStateOf<Int?>(null) }
     val built = target.take(used.size)
     val isLast = index + 1 >= rounds.size
     val scope = rememberCoroutineScope()
 
+    // The sound this letter makes in THIS word (silent letters map to "" → no
+    // sound). Keyed by position so e.g. the C in CASTLE is /k/, not the /s/ of C.
+    fun soundForLetter(ch: Char): String = round.sounds.getOrElse(target.indexOf(ch)) { "" }
+
     LaunchedEffect(index) {
         onProgress(index, rounds.size)
         delay(250)
-        speak(round.word)
+        audio.speak(round.word)
     }
     LaunchedEffect(wrongTile) { if (wrongTile != null) { delay(500); wrongTile = null } }
+    // Sound out the finished word. Keyed on `solved`, which resets with `index`, so
+    // advancing mid-sound-out cancels this and cuts the audio (see PhonicsAudio.play).
+    LaunchedEffect(solved) {
+        if (!solved) return@LaunchedEffect
+        // The final letter was already heard when it was armed, but not since it
+        // landed — sound it once more, then hold a beat of real silence, so the
+        // child hears "that's the last letter" and "now the whole word" as two
+        // separate things rather than one run-on stream.
+        audio.play(round.sounds.last())
+        delay(BLEND_LEAD_IN)
+        // Blend the whole word: each sound fully, in order, then the word itself.
+        round.sounds.forEach { slug ->
+            audio.play(slug)
+            delay(BLEND_SOUND_GAP)
+        }
+        delay(150)
+        audio.speak(target)
+    }
+    // Leaving the stage mid-sound-out: cut the audio so it doesn't play on after.
+    DisposableEffect(Unit) { onDispose { audio.stop() } }
 
     fun tap(i: Int, ch: Char) {
         if (i in used || wrongTile != null || solved) return
-        val pos = built.length
-        if (ch == target[pos]) {
-            used = used + i
-            // Sound out this letter as it lands (silent letters play nothing).
-            val lastSound = round.sounds.getOrNull(pos)?.takeIf { it.isNotEmpty() }
-            if (used.size < target.length) {
-                lastSound?.let(playPhoneme)
-            } else {
-                solved = true
-                scope.launch {
-                    // Let the final letter finish sounding before moving on, so it
-                    // isn't cut off by the blend that follows.
-                    lastSound?.let { playPhoneme(it); delay(800) }
-                    delay(250)
-                    // Blend the whole word: each sound in order, then the word.
-                    round.sounds.forEach { slug ->
-                        if (slug.isNotEmpty()) { playPhoneme(slug); delay(800) }
-                    }
-                    delay(150)
-                    speak(target)
-                }
-            }
-        } else {
-            wrongTile = i; mistakes += 1
+        // First tap: hear the letter's sound and arm the tile — don't place or judge
+        // yet, so a child can listen before committing. (A silent letter plays no
+        // sound, but the tile still highlights, so the tap doesn't feel ignored.)
+        if (pending != i) {
+            pending = i
+            scope.launch { audio.play(soundForLetter(ch)) }
+            return
         }
+        // Second tap on the armed tile: place it.
+        pending = null
+        if (ch != target[built.length]) {
+            wrongTile = i
+            mistakes += 1
+            return
+        }
+        used = used + i
+        // Already heard on the first tap — don't replay the individual sound.
+        if (used.size == target.length) solved = true
     }
 
     Column(
@@ -386,14 +409,20 @@ fun BuildWordGame(
         verticalArrangement = Arrangement.spacedBy(18.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text("Spell the word!", color = Theme.Ink.copy(alpha = 0.7f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            if (pending != null) "Tap it again to place it! 👆" else "Tap a letter to hear it",
+            color = Theme.Ink.copy(alpha = 0.7f),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth().kidCard().padding(20.dp),
         ) {
             Text(round.emoji, fontSize = 76.sp)
-            HearButton(onClick = { speak(round.word) }, color = color)
+            HearButton(onClick = { audio.speak(round.word) }, color = color)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
                 target.forEachIndexed { i, ch ->
                     Box(
@@ -411,28 +440,61 @@ fun BuildWordGame(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
             tiles.forEachIndexed { i, ch ->
                 val isUsed = i in used
+                val armed = pending == i
+                // The armed tile lifts, so "I'm listening to this one" is visible at
+                // a glance before the second tap commits it.
+                val tileScale by animateFloatAsState(
+                    targetValue = if (armed) 1.12f else 1f,
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    label = "armedTile",
+                )
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .size(54.dp)
+                        .scale(tileScale)
                         .alpha(if (isUsed) 0.25f else 1f)
                         .softShadow(RoundedCornerShape(12.dp))
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (wrongTile == i) Theme.Red else Color.White)
+                        .background(
+                            when {
+                                wrongTile == i -> Theme.Red
+                                armed -> color.copy(alpha = 0.2f)
+                                else -> Color.White
+                            },
+                        )
+                        .border(
+                            width = if (armed) 3.dp else 0.dp,
+                            color = if (armed) color else Color.Transparent,
+                            shape = RoundedCornerShape(12.dp),
+                        )
                         .clickable(enabled = !isUsed) { tap(i, ch) },
                 ) {
-                    Text("$ch", color = if (wrongTile == i) Color.White else Theme.Ink, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        "$ch",
+                        color = when {
+                            wrongTile == i -> Color.White
+                            armed -> color
+                            else -> Theme.Ink
+                        },
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                    )
                 }
             }
         }
         RoundFeedback(solved = solved, showWrong = wrongTile != null, isLast = isLast, color = color) {
+            // Stop the completion sound-out first so it can't bleed into the next
+            // round — the child chose to move on.
+            audio.stop()
             if (isLast) onFinish(mistakes) else index += 1
         }
         PhonicsBuddy(
             promptKey = "build-$target",
             prompt = "You are a cheerful phonics tutor for a 5-year-old. In ONE short sentence (max 15 words, simple words), help them sound out and spell the word \"$target\" letter by letter. Be warm. No emojis.",
+            game = PhonicsKind.BUILD,
             color = color,
-            speak = speak,
+            audio = audio,
         )
     }
 }
@@ -443,7 +505,7 @@ fun BuildWordGame(
 fun RhymeGame(
     rounds: List<RhymeRound>,
     color: Color,
-    speak: (String) -> Unit,
+    audio: PhonicsAudio,
     onProgress: (Int, Int) -> Unit,
     onFinish: (Int) -> Unit,
 ) {
@@ -458,14 +520,14 @@ fun RhymeGame(
     LaunchedEffect(index) {
         onProgress(index, rounds.size)
         delay(250)
-        speak(round.word)
+        audio.speak(round.word)
     }
     LaunchedEffect(wrong) { if (wrong != null) { delay(1300); wrong = null } }
 
     fun pick(orig: Int) {
         if (wrong != null || solved) return
         if (orig == round.answer) {
-            speak(round.options[orig].second)
+            audio.speak(round.options[orig].second)
             solved = true
         } else {
             wrong = orig; mistakes += 1
@@ -485,7 +547,7 @@ fun RhymeGame(
         ) {
             Text(round.emoji, fontSize = 72.sp)
             Text(round.word, color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
-            HearButton(onClick = { speak(round.word) }, color = color)
+            HearButton(onClick = { audio.speak(round.word) }, color = color)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
             order.forEach { orig ->
@@ -510,7 +572,7 @@ fun RhymeGame(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(color.copy(alpha = 0.15f))
-                            .clickable { speak(word) }
+                            .clickable { audio.speak(word) }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
                         Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear $word", tint = color, modifier = Modifier.size(18.dp))
@@ -524,8 +586,9 @@ fun RhymeGame(
         PhonicsBuddy(
             promptKey = "rhyme-${round.word}",
             prompt = "You are a cheerful phonics tutor for a 5-year-old. In ONE short sentence (max 15 words, simple words), hint at which word rhymes with \"${round.word}\" by describing its ending sound, without naming the answer. Be playful. No emojis.",
+            game = PhonicsKind.RHYME,
             color = color,
-            speak = speak,
+            audio = audio,
         )
     }
 }
@@ -536,7 +599,7 @@ fun RhymeGame(
 fun ListenFindGame(
     rounds: List<ListenRound>,
     color: Color,
-    speak: (String) -> Unit,
+    audio: PhonicsAudio,
     onProgress: (Int, Int) -> Unit,
     onFinish: (Int) -> Unit,
 ) {
@@ -551,14 +614,14 @@ fun ListenFindGame(
     LaunchedEffect(index) {
         onProgress(index, rounds.size)
         delay(300)
-        speak(round.word)
+        audio.speak(round.word)
     }
     LaunchedEffect(wrong) { if (wrong != null) { delay(1300); wrong = null } }
 
     fun pick(orig: Int) {
         if (wrong != null || solved) return
         if (orig == round.answer) {
-            speak(round.options[orig])
+            audio.speak(round.options[orig])
             solved = true
         } else {
             wrong = orig; mistakes += 1
@@ -584,7 +647,7 @@ fun ListenFindGame(
                     .softShadow(CircleShape)
                     .clip(CircleShape)
                     .background(color)
-                    .clickable { speak(round.word) },
+                    .clickable { audio.speak(round.word) },
             ) {
                 Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Listen", tint = Color.White, modifier = Modifier.size(48.dp))
             }
@@ -612,7 +675,7 @@ fun ListenFindGame(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(color.copy(alpha = 0.15f))
-                            .clickable { speak(word) }
+                            .clickable { audio.speak(word) }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
                         Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear $word", tint = color, modifier = Modifier.size(18.dp))
@@ -626,8 +689,9 @@ fun ListenFindGame(
         PhonicsBuddy(
             promptKey = "listen-${round.word}",
             prompt = "You are a cheerful phonics tutor for a 5-year-old. In ONE short sentence (max 15 words, simple words), give a fun clue about the word \"${round.word}\" so they can pick it, without saying the word. Be playful. No emojis.",
+            game = PhonicsKind.LISTEN,
             color = color,
-            speak = speak,
+            audio = audio,
         )
     }
 }
@@ -638,8 +702,7 @@ fun ListenFindGame(
 fun BlendGame(
     rounds: List<BlendRound>,
     color: Color,
-    speak: (String) -> Unit,
-    playPhoneme: (String) -> Unit,
+    audio: PhonicsAudio,
     onProgress: (Int, Int) -> Unit,
     onFinish: (Int) -> Unit,
 ) {
@@ -654,20 +717,26 @@ fun BlendGame(
     val order = remember(index) { round.options.indices.shuffled() }
     val isLast = index + 1 >= rounds.size
     val sounds = remember(index) { round.sounds.filter { it.isNotEmpty() } }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(index) { onProgress(index, rounds.size) }
-    // Play the sounds in order on entry and on each "Blend it". Keying on index
-    // cancels a stale blend if the child advances mid-playback.
+    // Play the sounds in order on entry and on each "Blend it". Keying on index and
+    // blendTick cancels a stale blend — and cuts its audio — if the child advances
+    // or replays mid-playback.
     LaunchedEffect(index, blendTick) {
         delay(if (blendTick == 0) 350 else 0)
-        sounds.forEach { slug -> playPhoneme(slug); delay(650) }
+        sounds.forEach { slug ->
+            audio.play(slug)
+            delay(BLEND_SOUND_GAP)
+        }
     }
     LaunchedEffect(wrong) { if (wrong != null) { delay(1300); wrong = null } }
+    DisposableEffect(Unit) { onDispose { audio.stop() } }
 
     fun pick(orig: Int) {
         if (wrong != null || solved) return
         if (orig == round.answer) {
-            speak(round.options[orig].second)
+            audio.speak(round.options[orig].second)
             solved = true
         } else {
             wrong = orig; mistakes += 1
@@ -701,7 +770,7 @@ fun BlendGame(
                             .softShadow(CircleShape)
                             .clip(CircleShape)
                             .background(color.copy(alpha = 0.15f))
-                            .clickable { playPhoneme(slug) },
+                            .clickable { scope.launch { audio.play(slug) } },
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.VolumeUp,
@@ -734,13 +803,15 @@ fun BlendGame(
             }
         }
         RoundFeedback(solved = solved, showWrong = wrong != null, isLast = isLast, color = color) {
+            audio.stop()
             if (isLast) onFinish(mistakes) else index += 1
         }
         PhonicsBuddy(
             promptKey = "blend-${round.word}",
             prompt = "You are a cheerful phonics tutor for a 5-year-old. In ONE short sentence (max 15 words, simple words), give a fun clue about the word \"${round.word}\" so they can pick it, without saying the word. Be playful. No emojis.",
+            game = PhonicsKind.BLEND,
             color = color,
-            speak = speak,
+            audio = audio,
         )
     }
 }
@@ -760,8 +831,7 @@ private fun slugForTeam(team: String): String = when (team) {
 fun DigraphGame(
     rounds: List<DigraphRound>,
     color: Color,
-    speak: (String) -> Unit,
-    playPhoneme: (String) -> Unit,
+    audio: PhonicsAudio,
     onProgress: (Int, Int) -> Unit,
     onFinish: (Int) -> Unit,
 ) {
@@ -772,18 +842,19 @@ fun DigraphGame(
     val round = rounds[index]
     val order = remember(index) { round.teams.indices.shuffled() }
     val isLast = index + 1 >= rounds.size
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(index) {
         onProgress(index, rounds.size)
         delay(350)
-        playPhoneme(round.sound)
+        audio.play(round.sound)
     }
     LaunchedEffect(wrong) { if (wrong != null) { delay(1300); wrong = null } }
 
     fun pick(orig: Int) {
         if (wrong != null || solved) return
         if (orig == round.answer) {
-            speak(round.exampleWord)
+            audio.speak(round.exampleWord)
             solved = true
         } else {
             wrong = orig; mistakes += 1
@@ -816,7 +887,7 @@ fun DigraphGame(
                     .softShadow(CircleShape)
                     .clip(CircleShape)
                     .background(color)
-                    .clickable { playPhoneme(round.sound) },
+                    .clickable { scope.launch { audio.play(round.sound) } },
             ) {
                 Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear the sound", tint = Color.White, modifier = Modifier.size(48.dp))
             }
@@ -856,7 +927,7 @@ fun DigraphGame(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(color.copy(alpha = 0.15f))
-                            .clickable { playPhoneme(slugForTeam(team)) }
+                            .clickable { scope.launch { audio.play(slugForTeam(team)) } }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
                         Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Hear $team", tint = color, modifier = Modifier.size(18.dp))
@@ -870,8 +941,9 @@ fun DigraphGame(
         PhonicsBuddy(
             promptKey = "digraph-${round.exampleWord}",
             prompt = "You are a cheerful phonics tutor for a 5-year-old. In ONE short sentence (max 15 words, simple words), remind them that the two letters \"${round.teams[round.answer]}\" make ONE sound, like in \"${round.exampleWord}\". Be warm. No emojis.",
+            game = PhonicsKind.DIGRAPH,
             color = color,
-            speak = speak,
+            audio = audio,
         )
     }
 }

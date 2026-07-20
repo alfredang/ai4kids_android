@@ -219,15 +219,19 @@ private fun PieceTile(image: ImageBitmap, home: Int, grid: Int, modifier: Modifi
 
 @Composable
 private fun Chip(label: String, selected: Boolean, color: Color, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
     Text(
         label,
         color = if (selected) Color.White else Theme.Ink.copy(alpha = 0.6f),
         fontSize = 14.sp,
         fontWeight = FontWeight.ExtraBold,
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            // softShadow BEFORE clip/background — the order `kidCardTray` below
+            // encodes. Reversed, the shadow's layer wraps only the label and paints
+            // a hard-edged white box over the rounded fill.
+            .then(if (selected) Modifier else Modifier.softShadow(shape))
+            .clip(shape)
             .background(if (selected) color else Color.White)
-            .then(if (selected) Modifier else Modifier.softShadow(RoundedCornerShape(16.dp)))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )

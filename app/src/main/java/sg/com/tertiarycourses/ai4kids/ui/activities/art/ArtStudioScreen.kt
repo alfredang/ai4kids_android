@@ -43,6 +43,7 @@ import sg.com.tertiarycourses.ai4kids.ai.ArtEngine
 import sg.com.tertiarycourses.ai4kids.data.LocalProgressStore
 import sg.com.tertiarycourses.ai4kids.model.Activity
 import sg.com.tertiarycourses.ai4kids.ui.components.CloseButton
+import sg.com.tertiarycourses.ai4kids.ui.components.IdeaChips
 import sg.com.tertiarycourses.ai4kids.ui.components.KidButton
 import sg.com.tertiarycourses.ai4kids.ui.components.StarBadge
 import sg.com.tertiarycourses.ai4kids.ui.components.kidCard
@@ -54,7 +55,7 @@ private const val ART_STARS = 3
 
 /**
  * The AI Art Studio: describe a picture, pick a style, and the AI paints it
- * (Gemini "Nano Banana", Cloudflare Flux fallback). The result can be turned into
+ * (NVIDIA FLUX.1-dev, Cloudflare Flux fallback). The result can be turned into
  * a jigsaw. Android port of the website's `/learn/art`.
  */
 @Composable
@@ -132,7 +133,7 @@ fun ArtStudioScreen(onClose: () -> Unit) {
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                FlowChips(ArtEngine.IDEAS) { prompt = it }
+                IdeaChips(ArtEngine.IDEAS) { prompt = it }
                 Text("Pick a style", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                 StyleChips(selected = style, accent = accent) { style = it }
                 KidButton(
@@ -205,15 +206,20 @@ private fun StyleChips(selected: String, accent: Color, onPick: (String) -> Unit
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { chip ->
                     val on = chip.key == selected
+                    val shape = RoundedCornerShape(16.dp)
                     Text(
                         "${chip.emoji} ${chip.label}",
                         color = if (on) Color.White else Theme.Ink.copy(alpha = 0.6f),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
+                            // softShadow BEFORE clip/background — the order `kidCard`
+                            // encodes. Reversed, the shadow's layer wraps only the
+                            // label and paints a hard-edged white box over the
+                            // rounded fill instead of casting behind it.
+                            .then(if (on) Modifier else Modifier.softShadow(shape))
+                            .clip(shape)
                             .background(if (on) accent else Color.White)
-                            .then(if (on) Modifier else Modifier.softShadow(RoundedCornerShape(16.dp)))
                             .clickable { onPick(chip.key) }
                             .padding(horizontal = 14.dp, vertical = 9.dp),
                     )
@@ -223,30 +229,6 @@ private fun StyleChips(selected: String, accent: Color, onPick: (String) -> Unit
     }
 }
 
-@Composable
-private fun FlowChips(items: List<String>, onPick: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { idea ->
-                    Text(
-                        "✨ $idea",
-                        color = Theme.Ink.copy(alpha = 0.55f),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Theme.Orange.copy(alpha = 0.10f))
-                            .clickable { onPick(idea) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    )
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
 
 @Composable
 private fun NotConfigured(onClose: () -> Unit, accent: Color) {

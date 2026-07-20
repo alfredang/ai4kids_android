@@ -9,7 +9,10 @@ Native **Android** port of the AI4Kids iOS app
 activity app for ages 4–16, built with **Kotlin + Jetpack Compose + Material 3**.
 
 The app is **offline-first**: the four home activities and the local star tally
-run fully on-device — no account, nothing leaves the phone. The home grid
+run on-device with no account, and every one of them is fully playable with no
+keys and no network. Two of them have *optional* keyed AI on top (see below), so
+"nothing leaves the phone" holds for the **default, keyless** build — not
+unconditionally. The home grid
 ([`model/Activity.kt`](app/src/main/java/sg/com/tertiarycourses/ai4kids/model/Activity.kt))
 holds:
 
@@ -35,8 +38,24 @@ friendly "ask a grown-up" state when no key is configured:
 - **Art Studio** (`ui/activities/art/`) — an AI-painted picture (Gemini "Nano
   Banana", Cloudflare Flux fallback) the child can then turn into a jigsaw.
 
-The Phonics "Buddy" can also call Gemini for hints. All Gemini/Cloudflare usage
-stays fully offline when the keys are blank.
+Two of the offline-core activities also call Gemini when a key is set:
+
+- **Phonics Quest**'s "Buddy" sends a short prompt for a hint.
+- **Story Builder** has two modes with *different* privacy weight. **"Build a
+  story"** weaves the tale from only the four ingredient picks — never free text —
+  and falls back to on-device templates, so it works with no key at all; when an
+  *image* key is also set it illustrates each page via `ArtEngine.paint` (sending
+  that page's prose, not the child's words, to NVIDIA/Cloudflare), otherwise pages
+  stay emoji-only and the mode is fully offline. **"Write your own"**
+  (`WriteMode`) sends the child's **typed idea** (≤300 chars) to Gemini: first to
+  a kid-safety gate (`GeminiClient.classifyStoryIdea`), then to write a 3-scene
+  story. Each scene is then **illustrated** via `ArtEngine.paint` — the same
+  NVIDIA-FLUX-then-Cloudflare image path as Art Studio — with an emoji as the
+  loading/failure fallback; nothing is saved off-device. With no key that mode
+  alone hides behind the "ask a grown-up" state while Build mode stays fully
+  playable.
+
+All Gemini/Cloudflare usage stays fully offline when the keys are blank.
 
 ## Privacy posture
 
