@@ -13,9 +13,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -42,6 +47,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
@@ -103,8 +109,12 @@ fun KidButton(
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
-            maxLines = 1,
-            softWrap = false,
+            // Wrap a long label (e.g. a "Painting picture 2 of 3…" progress state)
+            // onto a second line rather than hard-clipping it at the button edge.
+            // Short labels are unaffected — they still sit on one line.
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -171,9 +181,17 @@ fun CloseButton(onClick: () -> Unit) {
 /**
  * Celebratory burst of emoji "confetti" shown when a kid finishes a round.
  * Tapping anywhere dismisses it via [onDismiss].
+ *
+ * [actions] adds optional buttons inside the card — e.g. the Story Builder's "try
+ * the other path", which needs a way out of the celebration other than dismissing
+ * it. Their own taps are consumed, so pressing one doesn't also dismiss.
  */
 @Composable
-fun CelebrationView(message: String, onDismiss: () -> Unit) {
+fun CelebrationView(
+    message: String,
+    onDismiss: () -> Unit,
+    actions: @Composable (ColumnScope.() -> Unit)? = null,
+) {
     var animate by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { animate = true }
 
@@ -263,6 +281,59 @@ fun CelebrationView(message: String, onDismiss: () -> Unit) {
             }
             if (decor.isNotBlank()) {
                 Text(text = decor, fontSize = 40.sp, letterSpacing = 6.sp, textAlign = TextAlign.Center)
+            }
+            if (actions != null) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(top = 6.dp),
+                ) { actions() }
+            }
+        }
+    }
+}
+
+/**
+ * A two-column grid of tappable "idea" suggestions — the ✨ prompts offered under
+ * a free-text field so a child who can't think of anything still has a way in.
+ * Used by the Art Studio and the Story Builder's "Write your own".
+ *
+ * Chips in a row share the taller one's height, so a one-line idea beside a
+ * two-line one reads as a matched pair rather than a ragged step.
+ */
+@Composable
+fun IdeaChips(
+    items: List<String>,
+    tint: Color = Theme.Orange,
+    onPick: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.chunked(2).forEach { row ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.height(IntrinsicSize.Min),
+            ) {
+                row.forEach { idea ->
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(tint.copy(alpha = 0.10f))
+                            .clickable { onPick(idea) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            "✨ $idea",
+                            color = Theme.Ink.copy(alpha = 0.55f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }

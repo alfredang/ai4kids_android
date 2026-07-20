@@ -107,7 +107,7 @@ data class PhonicsStage(
         }
 }
 
-/** The five worlds of Phonics Quest. */
+/** The seven worlds of Phonics Quest. */
 val PHONICS_STAGES: List<PhonicsStage> = listOf(
     PhonicsStage(
         id = "letters-land",
@@ -229,9 +229,19 @@ val PHONICS_STAGES: List<PhonicsStage> = listOf(
     ),
 )
 
+/** Stars from mistakes: 0 → 3 stars, 1–2 → 2 stars, else 1 star. */
+fun starsForMistakes(mistakes: Int): Int = when {
+    mistakes == 0 -> 3
+    mistakes <= 2 -> 2
+    else -> 1
+}
+
 /**
  * Per-stage progress (best stars 0–3) persisted to SharedPreferences and exposed
  * as Compose state. A stage unlocks once the previous one is cleared (≥1 star).
+ *
+ * Local-only by design: the web keeps this per learner on the server, but the
+ * Android offline core has no accounts and collects nothing.
  */
 class PhonicsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("ai4kids.phonics", Context.MODE_PRIVATE)

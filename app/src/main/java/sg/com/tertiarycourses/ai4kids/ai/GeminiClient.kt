@@ -209,63 +209,14 @@ object GeminiClient {
         }.onFailure { dlog("call threw: ${it.message}", it) }.getOrNull()
     }
 
-    /** True when the Gemini image model is worth trying (a key is present). */
-    private const val IMAGE_MODEL = "gemini-2.5-flash-image"
-    private val IMAGE_ENDPOINT =
-        "https://generativelanguage.googleapis.com/v1beta/models/$IMAGE_MODEL:generateContent"
-
     /**
-     * Generate an image from an (already safety-checked) [fullPrompt] via Gemini
-     * 2.5 Flash Image ("Nano Banana"). Returns the raw image bytes (PNG/JPEG), or
-     * null when there's no key, no image quota, or any error — callers then fall
-     * back to Cloudflare Flux. A longer read timeout: image gen is slow.
+     * Shared plumbing for the kid-safety classifiers below. [ask] must instruct the
+     * model to return `{"safe": boolean, "cleanedPrompt": string}`; each caller
+     * words its own question, since "is this a wholesome *drawing*" and "…*story*"
+     * are judged differently. Returns (safe, cleanedPrompt), or null if the
+     * classifier is unavailable (callers then fail safe by using the raw prompt).
      */
-    suspend fun generateImage(fullPrompt: String): ByteArray? = withContext(Dispatchers.IO) {
-        val key = BuildConfig.GEMINI_API_KEY
-        if (key.isBlank()) return@withContext null
-
-        val body = JSONObject().put(
-            "contents",
-            JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", fullPrompt)))),
-        )
-
-        val request = Request.Builder()
-            .url(IMAGE_ENDPOINT)
-            .header("x-goog-api-key", key)
-            .post(body.toString().toRequestBody(JSON))
-            .build()
-
-        runCatching {
-            imageClient.newCall(request).execute().use { resp ->
-                val text = resp.body?.string().orEmpty()
-                dlog("HTTP ${resp.code} (${text.length} bytes)")
-                if (!resp.isSuccessful) { dlog("body: ${text.take(400)}"); return@use null }
-                val parts = JSONObject(text)
-                    .optJSONArray("candidates")
-                    ?.optJSONObject(0)
-                    ?.optJSONObject("content")
-                    ?.optJSONArray("parts") ?: return@use null
-                for (i in 0 until parts.length()) {
-                    val data = parts.optJSONObject(i)?.optJSONObject("inlineData")?.optString("data")
-                    if (!data.isNullOrEmpty()) return@use android.util.Base64.decode(data, android.util.Base64.DEFAULT)
-                }
-                null
-            }
-        }.onFailure { dlog("call threw: ${it.message}", it) }.getOrNull()
-    }
-
-    /**
-     * Kid-safety classifier: is a child's drawing idea wholesome? Returns
-     * (safe, cleanedPrompt), or null if the classifier is unavailable (callers
-     * then fail safe by using the raw prompt).
-     */
-    suspend fun classifyDrawing(prompt: String): Pair<Boolean, String>? {
-        val ask = """
-            A child wants to make a picture of: "$prompt".
-            Decide if this is wholesome and appropriate for a young child's drawing.
-            Return ONLY JSON: {"safe": boolean, "cleanedPrompt": "a tidied, kid-friendly version of the idea"}.
-            Mark unsafe anything violent, scary, sexual, hateful, or otherwise not for kids.
-        """.trimIndent()
+    private suspend fun classifySafe(ask: String, prompt: String): Pair<Boolean, String>? {
         val raw = generateJson(ask, maxTokens = 200) ?: return null
         return runCatching {
             val json = JSONObject(raw)
@@ -273,13 +224,35 @@ object GeminiClient {
         }.onFailure { dlog("call threw: ${it.message}", it) }.getOrNull()
     }
 
-    /** A separate client with a long read timeout for slow image generation. */
-    private val imageClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .build()
-    }
+    /** Kid-safety classifier: is a child's drawing idea wholesome? */
+    suspend fun classifyDrawing(prompt: String): Pair<Boolean, String>? = classifySafe(
+        """
+            A child wants to make a picture of: "$prompt".
+            Decide if this is wholesome and appropriate for a young child's drawing.
+            Return ONLY JSON: {"safe": boolean, "cleanedPrompt": "a tidied, kid-friendly version of the idea"}.
+            Mark unsafe anything violent, scary, sexual, hateful, or otherwise not for kids.
+        """.trimIndent(),
+        prompt,
+    )
+
+    /**
+     * Kid-safety classifier: is a child's story idea wholesome?
+     *
+     * Story Builder's "Write your own" is the only place a child's *free text*
+     * leaves the device for a story (Build mode sends only the ingredient picks),
+     * so it is gated before anything is generated from it. The web route has no
+     * equivalent gate — it leans on the model's own safety — so this is Android
+     * being deliberately stricter.
+     */
+    suspend fun classifyStoryIdea(prompt: String): Pair<Boolean, String>? = classifySafe(
+        """
+            A child wants a story about: "$prompt".
+            Decide if this is wholesome and appropriate for a young child's story.
+            Return ONLY JSON: {"safe": boolean, "cleanedPrompt": "a tidied, kid-friendly version of the idea"}.
+            Mark unsafe anything violent, scary, sexual, hateful, or otherwise not for kids.
+        """.trimIndent(),
+        prompt,
+    )
 
     private fun safety(category: String): JSONObject =
         JSONObject().put("category", category).put("threshold", "BLOCK_LOW_AND_ABOVE")

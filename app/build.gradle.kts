@@ -14,9 +14,13 @@ val localProps: Properties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 val geminiApiKey: String = localProps.getProperty("GEMINI_API_KEY", "")
+// NVIDIA NIM (build.nvidia.com) — the primary image provider for the AI Art
+// Studio (FLUX.1-dev). Free tier, no billing, which is why it replaced Nano
+// Banana. Optional; leave blank to fall straight through to Cloudflare.
+val nvidiaApiKey: String = localProps.getProperty("NVIDIA_API_KEY", "")
 // Cloudflare Workers AI — the free-tier image fallback for the AI Art Studio
-// (Flux) when the Gemini image model has no quota. Both optional; leave blank to
-// disable the fallback. Never hard-coded — read from git-ignored local.properties.
+// (Flux) when NVIDIA has no quota. Both optional; leave blank to disable the
+// fallback. Never hard-coded — read from git-ignored local.properties.
 val cloudflareAccountId: String = localProps.getProperty("CLOUDFLARE_ACCOUNT_ID", "")
 val cloudflareAiToken: String = localProps.getProperty("CLOUDFLARE_AI_TOKEN", "")
 
@@ -38,6 +42,7 @@ android {
         vectorDrawables { useSupportLibrary = true }
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+        buildConfigField("String", "NVIDIA_API_KEY", "\"$nvidiaApiKey\"")
         buildConfigField("String", "CLOUDFLARE_ACCOUNT_ID", "\"$cloudflareAccountId\"")
         buildConfigField("String", "CLOUDFLARE_AI_TOKEN", "\"$cloudflareAiToken\"")
     }

@@ -36,9 +36,9 @@ The core learning activities are **offline-first** — no login, progress stored
 the device. **Phonics Quest** (spoken "Buddy" hints) and **Story Builder** (freshly-written
 tales) can optionally call Google **Gemini** when an API key is set; both stay fully playable
 offline without it. Two more activities are **AI-powered** — **Talking Buddy** (chat by voice
-or text) and **Art Studio** (an AI-painted picture you turn into a jigsaw) — calling Gemini
-(with a Cloudflare image fallback) when a key is set, and showing a friendly "ask a grown-up"
-screen when it isn't. The **Escape Room** is a top-down puzzle adventure (built with
+or text, via Gemini) and **Art Studio** (an AI-painted picture — NVIDIA FLUX, Cloudflare
+fallback — you turn into a jigsaw) — active when a key is set, and showing a friendly "ask a
+grown-up" screen when it isn't. The **Escape Room** is a top-down puzzle adventure (built with
 LibGDX) you can play solo offline or **co-op** with friends over a room code. The **Brain
 Arcade** adds **online multiplayer card games**. Co-op Escape and the Brain Arcade need a
 sign-in and an internet connection; everything else works fully offline.
@@ -48,27 +48,30 @@ sign-in and an internet connection; everything else works fully offline.
 | Activity | Ages | What it does | Connectivity |
 | --- | --- | --- | --- |
 | 🔤 **Phonics Quest** | 4–6 | An adventure map of phonics "worlds" — listen to sounds, build words, find rhymes; spoken with on-device TextToSpeech | Offline (+ optional AI) |
-| 📖 **Story Builder** | 7–9 | Pick a hero, a place & a magic item; the app weaves a short illustrated story | Offline (+ optional AI) |
+| 📖 **Story Builder** | 7–9 | **Build a story** from a hero/place/item/mood into a twice-branching tale, or **Write your own** — type an idea for an AI-illustrated 3-scene story | Offline (+ optional AI) |
 | 🧩 **Code Puzzles** | 7–12 | Sequence arrow steps to walk a robot 🤖 to the star ⭐️ (algorithmic thinking) | Offline |
 | 🚪 **Escape Room** | 7–12 | Walk a top-down room, solve a chain of mini-puzzles and escape; five themed rooms, solo or co-op | Offline (solo) · Online (co-op) |
 | 💬 **Talking Buddy** | 5–10 | Chat with a friendly AI pal by voice or text; speech-in and spoken replies happen on-device | Online AI (key required) |
 | 🎨 **Art Studio** | 5–12 | Describe a picture, let AI paint it, then turn the picture into a jigsaw | Online AI (key required) |
 | 🧠 **Brain Arcade** | All | Ten **card games** — play solo, co-op, or versus friends | Online |
 
-### Phonics Quest — the five worlds
+### Phonics Quest — the seven worlds
 
 A map of phonics "worlds"; clearing one (≥1 star) unlocks the next, and each world earns up
-to **3 stars**. Letters, sounds and words are spoken on-device (`TextToSpeech`). When a
-Gemini key is configured, an **"Ask Buddy"** button adds a kid-friendly hint and the
-completion screen reads out personalized praise.
+to **3 stars**. Whole words are spoken on-device (`TextToSpeech`) and isolated sounds play
+bundled phoneme clips. When a Gemini key is configured, an **"Ask Buddy"** button adds a
+kid-friendly hint (with a canned fallback if the AI is slow); the completion screen shows
+instant, per-tier praise.
 
 | World | Game | Skill |
 | --- | --- | --- |
 | 🅰️ **Letters Land** | Pop the Phoneme | Hear three numbered sounds, pick the starting sound (letter hidden) |
-| 🌉 **Blend Bridge** | Build the Word | Spell a short word from shuffled letter tiles |
+| 🌉 **Blend Bridge** | Build the Word | Spell a short word by ear — tap a tile to hear it, tap again to place it |
 | 🤫 **Whisper Woods** | Build the Word | Spell words with **silent letters** (lamb, knife, ghost…) |
 | 🎵 **Rhyme Road** | Rhyme Time | Pick the picture/word that **rhymes** with the target |
 | 👑 **Story Kingdom** | Listen & Find | Hear a word, choose it among **similar-sounding** words |
+| 🌀 **Sound Blender** | Sound Blender | Hear each sound, blend them, then tap the matching picture (no letters) |
+| 🤝 **Sound Buddies** | Buddy Sounds | Hear a two-letter sound, pick the letter team (sh, ch, th…) that spells it |
 
 ### Escape Room — the five themed rooms
 
@@ -115,7 +118,7 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
 | **Game engine** | LibGDX 1.13.1 (the Escape Room — a self-contained `AndroidApplication`) |
 | **Architecture** | Single-Activity Compose home; the Escape Room runs as a separate LibGDX `Activity`; shared state via `CompositionLocal` |
 | **Audio** | Android `TextToSpeech` (on-device, offline) for Phonics |
-| **AI (optional)** | Google **Gemini** (`gemini-2.5-flash` text; "Nano Banana" image) with a **Cloudflare** Workers AI (Flux) image fallback — Phonics Buddy, Story Builder, Talking Buddy & Art Studio |
+| **AI (optional)** | Google **Gemini** (`gemini-2.5-flash`) for text — Phonics Buddy, Story Builder, Talking Buddy, and story-idea/drawing safety checks. Images via **NVIDIA NIM (FLUX.1-dev)** with a **Cloudflare** Workers AI (Flux) fallback — Art Studio & Story Builder's "Write your own" illustrations |
 | **Networking** | OkHttp 4.12.0 (Brain Arcade, co-op Escape, and the optional AI activities) |
 | **Auth** | NextAuth credentials flow, session cookie persisted locally |
 | **Persistence** | `SharedPreferences` (activity + phonics stars, best times, session cookie) |
@@ -160,21 +163,24 @@ app/src/main/java/sg/com/tertiarycourses/ai4kids/
 ├── model/Activity.kt            # The home activities (title, color, age band, icon)
 ├── data/ProgressStore.kt        # Local star tally, persisted to SharedPreferences
 ├── ai/
-│   ├── GeminiClient.kt          # Gemini text/JSON/chat/image (Phonics, Story, Buddy, Art)
+│   ├── GeminiClient.kt          # Gemini text/JSON/chat + kid-safety classifiers (Phonics, Story, Buddy)
+│   ├── NvidiaClient.kt          # NVIDIA NIM (FLUX.1-dev) — primary image provider
 │   ├── CloudflareClient.kt      # Cloudflare Workers AI (Flux) image fallback
-│   └── ArtEngine.kt             # Art Studio safety-gate + image generate orchestrator
+│   └── ArtEngine.kt             # Safety-gate + NVIDIA→Cloudflare paint (Art Studio + Story scenes)
 ├── ui/
 │   ├── theme/Theme.kt           # Brand palette, shapes, shadows, background gradient
 │   ├── RootScreen.kt            # Home grid of activity cards + Brain Arcade tile
 │   ├── ParentsCornerSheet.kt    # Privacy info + reset progress
-│   ├── components/SharedUI.kt   # KidButton, StarBadge, CloseButton, CelebrationView
+│   ├── components/SharedUI.kt   # KidButton, StarBadge, CloseButton, CelebrationView, IdeaChips
 │   └── activities/
-│       ├── StoryBuilderScreen.kt
+│       ├── StoryBuilderScreen.kt   # Build a story + Write your own (reader UI)
+│       ├── StoryEngine.kt          # Pure branching-story logic (unit-tested)
 │       ├── CodePuzzlesScreen.kt
+│       ├── CodePuzzlesEngine.kt    # Pure path-planner logic (unit-tested)
 │       ├── phonics/             # Phonics Quest
-│       │   ├── PhonicsContent.kt   # 5 worlds + per-stage star store
-│       │   ├── PhonicsGames.kt     # Mini-games + TextToSpeech speaker + Gemini Buddy
-│       │   ├── PhonemeAudio.kt     # Bundled isolated-phoneme audio player
+│       │   ├── PhonicsContent.kt   # 7 worlds + per-stage star store
+│       │   ├── PhonicsGames.kt     # Mini-games + optional Gemini Buddy
+│       │   ├── PhonemeAudio.kt     # On-device phonics audio (TTS words + bundled phoneme clips)
 │       │   └── PhonicsScreen.kt    # Adventure map + stage host
 │       ├── buddy/               # Talking Buddy — AI chat (voice/text)
 │       │   ├── TalkingBuddyScreen.kt
@@ -249,20 +255,52 @@ GEMINI_API_KEY=your_key_here
 
 Leave it blank and the phonics games still work fully offline (just without the AI Buddy).
 
+### AI Art Studio (optional)
+
+The Art Studio generates pictures from a child's idea. It tries **NVIDIA NIM
+(FLUX.1-dev)** first — free, no billing — then falls back to **Cloudflare Workers AI
+(Flux)**. Add whichever key(s) you have to `local.properties` (git-ignored):
+
+```properties
+NVIDIA_API_KEY=nvapi-your_key_here
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+CLOUDFLARE_AI_TOKEN=your_workers_ai_token
+```
+
+With none set, the Art Studio stays dormant behind an "ask a grown-up" screen. The
+child's idea is safety-checked, then sent to the configured provider to draw — no image
+is generated on-device. Story Builder's **"Write your own"** uses these same image
+providers to illustrate each story scene (with an emoji fallback), so a key here lights
+that up too.
+
 ## Privacy
 
 - **Code Puzzles** and the **solo** Escape Room request **no network** and collect **no data**.
 - **Story Builder** and **Phonics Quest** are offline by default. When a Gemini API key is
-  configured they can call Google's **Gemini** API: Story Builder sends the chosen
-  ingredients (hero, place, item, mood) to write a story, and Phonics Quest's **"Buddy"**
-  sends a short prompt for a hint when the child taps "Ask Buddy". With no key, both run
-  fully on-device.
-- **Talking Buddy** and **Art Studio** are AI activities: with a key set they send the
-  child's typed/spoken message or drawing prompt to Google **Gemini** (and, for the image
-  fallback, **Cloudflare** Workers AI). Talking Buddy uses Android's **`SpeechRecognizer`**
-  for speech input (which may send audio to Google for recognition — we pass
-  `EXTRA_PREFER_OFFLINE`) and on-device `TextToSpeech` for replies. With no key they stay
-  dormant behind an "ask a grown-up" screen.
+  configured they can call Google's **Gemini** API: Story Builder's **"Build a story"**
+  sends only the chosen ingredients (hero, place, item, mood) — never free text — to write
+  the tale, and Phonics Quest's **"Buddy"** sends a short prompt for a hint when the child
+  taps "Ask Buddy". With no key, both run fully on-device.
+- **"Build a story" illustrations:** if an **image** key (NVIDIA/Cloudflare) is also set,
+  each page is painted, which sends that page's prose to the image provider. The prose is
+  written from the picks (or by Gemini) — still never the child's own words — and an emoji
+  header stands in while it paints. With no image key, pages stay emoji-only and Build mode
+  is fully offline as before.
+- **Story Builder's "Write your own"** is the one part of Story Builder that sends the
+  child's **own words**: with a key set, the typed idea (up to 300 characters) goes to
+  **Gemini** — first to a kid-safety check, then to write a 3-scene story. Each scene is
+  then **illustrated** by sending its (AI-written) visual description to the same image
+  providers Art Studio uses — **NVIDIA FLUX** with a **Cloudflare** fallback — and an emoji
+  stands in while the picture loads or if it can't be painted. Stories are never saved
+  off-device. With no key the whole mode stays dormant behind an "ask a grown-up" screen,
+  and "Build a story" is unaffected.
+- **Talking Buddy** and **Art Studio** are AI activities: with a key set, **Talking Buddy**
+  sends the child's typed/spoken message to Google **Gemini** for a reply, and **Art Studio**
+  sends the child's drawing prompt to Gemini for a kid-safety check, then to **NVIDIA FLUX**
+  (with a **Cloudflare** Workers AI fallback) to paint the picture. Talking Buddy uses
+  Android's **`SpeechRecognizer`** for speech input (which may send audio to Google for
+  recognition — we pass `EXTRA_PREFER_OFFLINE`) and on-device `TextToSpeech` for replies.
+  With no key they stay dormant behind an "ask a grown-up" screen.
 - `INTERNET` / `ACCESS_NETWORK_STATE` permissions are used by Brain Arcade's online card
   games, **co-op** Escape rooms, and the AI activities (Story Builder, Phonics Buddy,
   Talking Buddy, Art Studio). `RECORD_AUDIO` is used **only** by Talking Buddy, for

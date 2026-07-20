@@ -13,10 +13,10 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Free-tier image fallback for the AI Art Studio, via Cloudflare Workers AI
- * (Flux-1-schnell). Used when Gemini's image model has no quota. Credentials come
+ * (Flux-1-schnell). Used when NVIDIA FLUX has no quota. Credentials come
  * from `BuildConfig` (set in local.properties); if either is blank the fallback
  * is simply skipped and the caller degrades gracefully. Mirrors the website's
- * `gemini-image.ts` Cloudflare path.
+ * `kid-image.ts` Cloudflare path.
  */
 object CloudflareClient {
 
@@ -41,12 +41,17 @@ object CloudflareClient {
      * Generate an image from an (already safety-checked) [fullPrompt]. Returns the
      * raw JPEG bytes, or null on missing credentials / any error.
      */
-    suspend fun generateImage(fullPrompt: String): ByteArray? = withContext(Dispatchers.IO) {
+    suspend fun generateImage(fullPrompt: String, seed: Int? = null): ByteArray? = withContext(Dispatchers.IO) {
         val account = BuildConfig.CLOUDFLARE_ACCOUNT_ID
         val token = BuildConfig.CLOUDFLARE_AI_TOKEN
         if (account.isBlank() || token.isBlank()) return@withContext null
 
-        val body = JSONObject().put("prompt", fullPrompt).put("steps", 4)
+        // 8 steps is schnell's documented max — 4 (its default) paints in a couple
+        // of seconds but comes out soft/smeared; 8 is meaningfully sharper for barely
+        // more time, which matters when this is the primary story painter.
+        // A fixed seed keeps a story's hero consistent across pages (see NvidiaClient).
+        val body = JSONObject().put("prompt", fullPrompt).put("steps", 8)
+            .apply { if (seed != null) put("seed", seed) }
         val request = Request.Builder()
             .url("https://api.cloudflare.com/client/v4/accounts/$account/ai/run/$MODEL")
             .header("Authorization", "Bearer $token")

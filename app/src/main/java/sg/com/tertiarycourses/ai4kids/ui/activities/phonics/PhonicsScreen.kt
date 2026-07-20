@@ -36,7 +36,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,8 +48,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
-import sg.com.tertiarycourses.ai4kids.ai.GeminiClient
 import sg.com.tertiarycourses.ai4kids.data.LocalProgressStore
 import sg.com.tertiarycourses.ai4kids.model.Activity
 import sg.com.tertiarycourses.ai4kids.ui.components.CloseButton
@@ -62,17 +59,25 @@ import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
 
 /**
  * Phonics Quest — an adventure map of phonics "worlds", each a quick mini-game
- * (Pop the Phoneme, Build the Word, Rhyme Time). Clearing a world unlocks the
- * next and earns up to 3 stars. Sounds are spoken on-device; an optional Gemini
- * "Buddy" adds hints and personalized praise when an API key is configured.
+ * (Pop the Phoneme, Build the Word, Rhyme Time, Listen & Find, Sound Blender,
+ * Buddy Sounds). Clearing a world unlocks the next and earns up to 3 stars.
+ * Whole words are spoken on-device and isolated sounds play bundled clips, so the
+ * quest runs fully offline; an optional Gemini "Buddy" adds hints when an API key
+ * is configured.
  *
- * Replaces the old "Coming soon" placeholder. Ideas adapted from PhonixQuest.
+ * Mirrors the web app's `PhonicsQuest.tsx`, which is the source of truth for the
+ * quest's behaviour. Two intentional divergences: the Buddy calls Gemini directly
+ * on-device instead of the web's `/api/learn/phonics-buddy`, and the star tally
+ * stays in local `SharedPreferences` (`PhonicsStore`) rather than syncing to the
+ * server — the offline core collects nothing.
  */
 @Composable
 fun PhonicsScreen(onClose: () -> Unit) {
     val context = LocalContext.current
     val store = remember { PhonicsStore(context) }
-    val speak = rememberSpeaker()
+    // Whole words go through TTS, isolated sounds through the bundled clips; one
+    // engine owns both so a clip can silence the voice before it sounds.
+    val audio = rememberPhonicsAudio()
     var selected by remember { mutableStateOf<Int?>(null) }
 
     BackHandler { if (selected != null) selected = null else onClose() }
@@ -80,7 +85,7 @@ fun PhonicsScreen(onClose: () -> Unit) {
     if (selected == null) {
         AdventureMap(store = store, onPick = { selected = it }, onClose = onClose)
     } else {
-        StageHost(index = selected!!, store = store, speak = speak, onBack = { selected = null })
+        StageHost(index = selected!!, store = store, audio = audio, onBack = { selected = null })
     }
 }
 
@@ -178,37 +183,32 @@ private fun StageNode(stage: PhonicsStage, number: Int, stars: Int, unlocked: Bo
 
 /* ----------------------------- Stage host ----------------------------- */
 
+/** Canned praise per star tier, spoken and shown on clearing a world. Hardcoded
+ *  on purpose: a celebration must be instant, and an LLM round-trip (~1s, or far
+ *  longer when the model is slow or rate-limited) is far too slow to cheer a child
+ *  who has just finished. */
+private val PRAISE = mapOf(
+    3 to "Perfect! You cleared every round!",
+    2 to "Great job! You're getting really good at this!",
+    1 to "Well done! Keep practising and you'll be a superstar!",
+)
+
 @Composable
-private fun StageHost(index: Int, store: PhonicsStore, speak: (String) -> Unit, onBack: () -> Unit) {
+private fun StageHost(index: Int, store: PhonicsStore, audio: PhonicsAudio, onBack: () -> Unit) {
     val stage = PHONICS_STAGES[index]
     val globalProgress = LocalProgressStore.current
-    val scope = rememberCoroutineScope()
-    // Isolated phoneme sounds play from bundled clips (accurate /æ/, /s/…),
-    // while whole words still use TTS via `speak`.
-    val playPhoneme = rememberPhonemePlayer()
 
     var round by remember { mutableIntStateOf(0) }
     var total by remember { mutableIntStateOf(stage.rounds) }
     var earned by remember { mutableStateOf<Int?>(null) }
-    var aiMessage by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
 
     fun finish(mistakes: Int) {
-        val stars = if (mistakes == 0) 3 else if (mistakes <= 2) 2 else 1
+        val stars = starsForMistakes(mistakes)
         val delta = store.record(stage.id, stars)
         if (delta > 0) globalProgress.award(delta, Activity.PHONICS)
         earned = stars
-        if (GeminiClient.isConfigured()) {
-            scope.launch {
-                val msg = GeminiClient.generate(
-                    "You are a cheerful phonics tutor. A 5-year-old just finished the \"${stage.title}\" phonics game " +
-                        "(about ${stage.subtitle.lowercase()}) with $stars out of 3 stars. Write ONE short, warm congratulations sentence (max 18 words). No emojis.",
-                )
-                if (msg != null) { aiMessage = msg; speak(msg) } else speak("Great job!")
-            }
-        } else {
-            speak("Great job!")
-        }
+        PRAISE[stars]?.let(audio::speak)
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Theme.Background)) {
@@ -254,12 +254,12 @@ private fun StageHost(index: Int, store: PhonicsStore, speak: (String) -> Unit, 
                 key(attempt) {
                     val onProgress: (Int, Int) -> Unit = { r, t -> round = r; total = t }
                     when (stage.kind) {
-                        PhonicsKind.POP -> PopPhonemeGame(stage.pop, stage.color, speak, playPhoneme, onProgress, ::finish)
-                        PhonicsKind.BUILD -> BuildWordGame(stage.build, stage.color, speak, playPhoneme, onProgress, ::finish)
-                        PhonicsKind.RHYME -> RhymeGame(stage.rhyme, stage.color, speak, onProgress, ::finish)
-                        PhonicsKind.LISTEN -> ListenFindGame(stage.listen, stage.color, speak, onProgress, ::finish)
-                        PhonicsKind.BLEND -> BlendGame(stage.blend, stage.color, speak, playPhoneme, onProgress, ::finish)
-                        PhonicsKind.DIGRAPH -> DigraphGame(stage.digraph, stage.color, speak, playPhoneme, onProgress, ::finish)
+                        PhonicsKind.POP -> PopPhonemeGame(stage.pop, stage.color, audio, onProgress, ::finish)
+                        PhonicsKind.BUILD -> BuildWordGame(stage.build, stage.color, audio, onProgress, ::finish)
+                        PhonicsKind.RHYME -> RhymeGame(stage.rhyme, stage.color, audio, onProgress, ::finish)
+                        PhonicsKind.LISTEN -> ListenFindGame(stage.listen, stage.color, audio, onProgress, ::finish)
+                        PhonicsKind.BLEND -> BlendGame(stage.blend, stage.color, audio, onProgress, ::finish)
+                        PhonicsKind.DIGRAPH -> DigraphGame(stage.digraph, stage.color, audio, onProgress, ::finish)
                     }
                 }
             }
@@ -269,9 +269,8 @@ private fun StageHost(index: Int, store: PhonicsStore, speak: (String) -> Unit, 
             StageComplete(
                 stage = stage,
                 stars = stars,
-                aiMessage = aiMessage,
                 onAgain = {
-                    earned = null; aiMessage = null; round = 0; attempt += 1
+                    earned = null; round = 0; attempt += 1
                 },
                 onMap = onBack,
             )
@@ -282,7 +281,7 @@ private fun StageHost(index: Int, store: PhonicsStore, speak: (String) -> Unit, 
 /* ----------------------------- Completion overlay ----------------------------- */
 
 @Composable
-private fun StageComplete(stage: PhonicsStage, stars: Int, aiMessage: String?, onAgain: () -> Unit, onMap: () -> Unit) {
+private fun StageComplete(stage: PhonicsStage, stars: Int, onAgain: () -> Unit, onMap: () -> Unit) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
@@ -315,11 +314,12 @@ private fun StageComplete(stage: PhonicsStage, stars: Int, aiMessage: String?, o
                     )
                 }
             }
-            aiMessage?.let {
+            PRAISE[stars]?.let {
                 Text(
-                    "🤖 $it",
+                    it,
                     color = Theme.Ink.copy(alpha = 0.8f),
                     fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
