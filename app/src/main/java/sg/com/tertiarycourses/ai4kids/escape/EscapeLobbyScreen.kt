@@ -217,7 +217,7 @@ fun EscapeLobbyScreen(onClose: () -> Unit, onPlay: (code: String?, host: Boolean
                         enabled = !busy && joinCode.isNotBlank(), onClick = { join() }, modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                Step.LOGIN -> Unit
+                Step.GATE, Step.LOGIN -> Unit
             }
 
             error?.let { Text(it, color = Theme.Red, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
