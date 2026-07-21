@@ -257,6 +257,393 @@ fun BeatDieBoard(view: BeatDieView, busy: Boolean, onMove: (JSONObject) -> Unit)
     }
 }
 
+/* ----------------------------- Make Ten ----------------------------- */
+
+@Composable
+fun MakeTenBoard(view: MakeTenView, busy: Boolean, onMove: (JSONObject) -> Unit) {
+    // Selection resets whenever the board changes (a pair cleared, or a retry).
+    val selected = remember(view.cleared, view.cards.size) { mutableStateListOf<Int>() }
+
+    // Per-round countdown: restarts each round, and fires a timeout (loss) at 0.
+    var remaining by remember(view.round) { mutableStateOf(view.roundMs) }
+    LaunchedEffect(view.round) {
+        val deadline = System.currentTimeMillis() + view.roundMs
+        while (true) {
+            val left = deadline - System.currentTimeMillis()
+            remaining = left.coerceAtLeast(0L)
+            if (left <= 0L) { onMove(move("timeout")); break }
+            delay(50)
+        }
+    }
+
+    fun tap(id: Int) {
+        if (busy) return
+        if (selected.contains(id)) { selected.remove(id); return }
+        if (selected.size >= 2) return
+        selected.add(id)
+        if (selected.size == 2) {
+            onMove(cardsMove("clear", selected.toList()))
+            selected.clear()
+        }
+    }
+
+    val frac = (remaining.toFloat() / view.roundMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
+    val secs = Math.ceil(remaining / 1000.0).toInt()
+    val urgent = remaining <= 2000L
+    val timerColor = if (urgent) Theme.Red else Theme.Teal
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("Round ${view.round}/${view.goal}", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Text("⏱ ${secs}s", color = timerColor, fontSize = 16.sp, fontWeight = FontWeight.Black)
+        }
+        Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)).background(Theme.Ink.copy(alpha = 0.1f))) {
+            Box(Modifier.fillMaxWidth(frac).height(8.dp).clip(RoundedCornerShape(50)).background(timerColor))
+        }
+        Text("Tap two cards that add to 10", color = Theme.Ink.copy(alpha = 0.5f), fontSize = 13.sp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(6),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+            userScrollEnabled = false,
+        ) {
+            itemsIndexed(view.cards, key = { _, c -> c.id }) { _, c ->
+                val on = selected.contains(c.id)
+                val shape = RoundedCornerShape(10.dp)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .aspectRatio(0.72f)
+                        .clip(shape)
+                        .background(if (on) Theme.Teal else Color.White)
+                        .border(width = if (on) 2.5.dp else 1.5.dp, color = if (on) Theme.Teal else Theme.Ink.copy(alpha = 0.12f), shape = shape)
+                        .let { if (!busy) it.clickable { tap(c.id) } else it },
+                ) {
+                    Text("${c.value}", color = if (on) Color.White else Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                }
+            }
+        }
+    }
+}
+
+/* ----------------------------- Critter Count ----------------------------- */
+
+@Composable
+fun WheelBoard(view: WheelView, busy: Boolean, onMove: (JSONObject) -> Unit) {
+    // Start each new round already spinning (set during composition, not in the
+    // effect) so the next round's cards never flash for a frame before the spin.
+    var spinning by remember(view.round) { mutableStateOf(!view.lastRound) }
+    var spinIdx by remember { mutableStateOf(0) }
+
+    // Spin the wheel at the start of each round (the last round has one animal,
+    // so it just lands without spinning).
+    LaunchedEffect(view.round) {
+        val targetIdx = view.wheel.indexOf(view.targetAnimal).coerceAtLeast(0)
+        if (view.lastRound || view.wheel.size <= 1) {
+            spinIdx = targetIdx; spinning = false; return@LaunchedEffect
+        }
+        val n = view.wheel.size
+        var d = 55L
+        for (s in 0..(n * 3 + targetIdx)) {
+            spinIdx = s % n
+            delay(d)
+            d += 7 // decelerate
+        }
+        spinIdx = targetIdx
+        spinning = false
+    }
+
+    // The last round isn't spun, so it gets a "Final Round!" prompt instead —
+    // the player taps to begin, and only then does the countdown start.
+    var ready by remember(view.round) { mutableStateOf(!view.lastRound) }
+
+    // Per-sub-round countdown — starts once the spin settles (and the final-round
+    // prompt is dismissed); timeout = loss.
+    var remaining by remember(view.round, view.subround) { mutableStateOf(view.roundMs) }
+    LaunchedEffect(view.round, view.subround, spinning, ready) {
+        if (spinning || !ready) return@LaunchedEffect
+        val deadline = System.currentTimeMillis() + view.roundMs
+        while (true) {
+            val left = deadline - System.currentTimeMillis()
+            remaining = left.coerceAtLeast(0L)
+            if (left <= 0L) { onMove(move("timeout")); break }
+            delay(50)
+        }
+    }
+
+    val frac = (remaining.toFloat() / view.roundMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
+    val secs = Math.ceil(remaining / 1000.0).toInt()
+    val urgent = remaining <= 2000L
+    val timerColor = if (urgent) Theme.Red else Theme.Orange
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Round ${view.round}/${view.roundsTotal} · Pick ${view.subround}/${view.subroundsTotal}",
+            color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+        )
+
+        // The wheel — a strip of the remaining animals, one highlighted.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().height(64.dp),
+        ) {
+            view.wheel.forEachIndexed { i, a ->
+                val on = i == spinIdx
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(if (on) 56.dp else 44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (on) Theme.Orange.copy(alpha = 0.22f) else Theme.Ink.copy(alpha = 0.05f))
+                        .border(if (on) 2.5.dp else 0.dp, if (on) Theme.Orange else Color.Transparent, RoundedCornerShape(14.dp)),
+                ) {
+                    Text(a, fontSize = if (on) 30.sp else 22.sp)
+                }
+            }
+        }
+
+        if (spinning) {
+            Text("Choosing an animal…", color = Theme.Ink.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        } else if (!ready) {
+            // Final-round announcement — no spin this time, so give the player a beat.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth().kidCard().padding(24.dp),
+            ) {
+                Text("🏁", fontSize = 48.sp)
+                Text("Final Round!", color = Theme.Ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+                Text(
+                    "Just one animal left — ${view.targetAnimal}. Get this card right to win!",
+                    color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp, textAlign = TextAlign.Center,
+                )
+                KidButton(title = "I'm ready! ▶", color = Theme.Orange, onClick = { ready = true })
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Find the card with", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Theme.Orange.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text("${view.targetCount} ${view.targetAnimal}", color = Theme.Orange, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                }
+            }
+
+            Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)).background(Theme.Ink.copy(alpha = 0.1f))) {
+                Box(Modifier.fillMaxWidth(frac).height(8.dp).clip(RoundedCornerShape(50)).background(timerColor))
+            }
+            Text(
+                "⏱ ${secs}s" + if (view.wrongPicks.isEmpty()) "" else "   ❌ no more chances left — choose carefully!",
+                color = if (urgent || view.wrongPicks.isNotEmpty()) Theme.Red else Theme.Ink.copy(alpha = 0.6f),
+                fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+            )
+
+            val canTap = !busy && !spinning
+            view.cards.chunked(2).forEach { rowCards ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    rowCards.forEach { card ->
+                        WheelCard(
+                            card = card,
+                            wrong = view.wrongPicks.contains(card.id),
+                            enabled = canTap,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onMove(JSONObject().put("type", "pick").put("cardId", card.id)) },
+                        )
+                    }
+                    if (rowCards.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WheelCard(card: WheelCardView, wrong: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    // Scatter the animals (seeded by id so it stays put across recompositions).
+    val emojis = remember(card.id) {
+        card.counts.flatMap { (a, n) -> List(n) { a } }.shuffled(kotlin.random.Random(card.id))
+    }
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .heightIn(min = 100.dp)
+            .clip(shape)
+            .background(if (wrong) Theme.Red.copy(alpha = 0.12f) else Color.White)
+            .border(width = if (wrong) 2.dp else 1.5.dp, color = if (wrong) Theme.Red else Theme.Ink.copy(alpha = 0.12f), shape = shape)
+            .let { if (enabled && !wrong) it.clickable(onClick = onClick) else it }
+            .padding(10.dp),
+    ) {
+        if (emojis.isEmpty()) {
+            Text("—", color = Theme.Ink.copy(alpha = 0.3f), fontSize = 26.sp)
+        } else {
+            Text(emojis.joinToString(" "), fontSize = 22.sp, lineHeight = 30.sp, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+/* ----------------------------- Odd One Out ----------------------------- */
+
+@Composable
+fun OddOneOutBoard(view: OddOneView, busy: Boolean, onMove: (JSONObject) -> Unit) {
+    // Per-sub-round countdown; timeout = loss. No spin — the cards are the whole
+    // puzzle, so they're shown straight away and the timer starts immediately.
+    var remaining by remember(view.round, view.subround) { mutableStateOf(view.roundMs) }
+    LaunchedEffect(view.round, view.subround) {
+        val deadline = System.currentTimeMillis() + view.roundMs
+        while (true) {
+            val left = deadline - System.currentTimeMillis()
+            remaining = left.coerceAtLeast(0L)
+            if (left <= 0L) { onMove(move("timeout")); break }
+            delay(50)
+        }
+    }
+
+    val frac = (remaining.toFloat() / view.roundMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
+    val secs = Math.ceil(remaining / 1000.0).toInt()
+    val urgent = remaining <= 2000L
+    val timerColor = if (urgent) Theme.Red else Theme.Purple
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Round ${view.round}/${view.roundsTotal} · Pick ${view.subround}/${view.subroundsTotal}",
+            color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+        )
+        Text(
+            "Tap the card that's different",
+            color = Theme.Ink, fontSize = 17.sp, fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
+
+        Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)).background(Theme.Ink.copy(alpha = 0.1f))) {
+            Box(Modifier.fillMaxWidth(frac).height(8.dp).clip(RoundedCornerShape(50)).background(timerColor))
+        }
+        Text(
+            "⏱ ${secs}s" + if (view.wrongPicks.isEmpty()) "" else "   ❌ one mistake — look closely!",
+            color = if (urgent || view.wrongPicks.isNotEmpty()) Theme.Red else Theme.Ink.copy(alpha = 0.6f),
+            fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
+
+        val canTap = !busy
+        view.cards.chunked(2).forEach { rowCards ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                rowCards.forEach { card ->
+                    OddCard(
+                        card = card,
+                        wrong = view.wrongPicks.contains(card.id),
+                        enabled = canTap,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onMove(JSONObject().put("type", "pick").put("cardId", card.id)) },
+                    )
+                }
+                if (rowCards.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun OddCard(card: WheelCardView, wrong: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    // Canonical order (no shuffle): the four matching cards render identically,
+    // so the odd one stands out.
+    val emojis = card.counts.flatMap { (a, n) -> List(n) { a } }
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .heightIn(min = 100.dp)
+            .clip(shape)
+            .background(if (wrong) Theme.Red.copy(alpha = 0.12f) else Color.White)
+            .border(width = if (wrong) 2.dp else 1.5.dp, color = if (wrong) Theme.Red else Theme.Ink.copy(alpha = 0.12f), shape = shape)
+            .let { if (enabled && !wrong) it.clickable(onClick = onClick) else it }
+            .padding(10.dp),
+    ) {
+        if (emojis.isEmpty()) {
+            Text("—", color = Theme.Ink.copy(alpha = 0.3f), fontSize = 26.sp)
+        } else {
+            Text(emojis.joinToString(" "), fontSize = 22.sp, lineHeight = 30.sp, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+/* ----------------------------- Alphabet Lock ----------------------------- */
+
+@Composable
+fun AlphabetLockBoard(view: SeqView, busy: Boolean, onMove: (JSONObject) -> Unit) {
+    // After a wrong flip, show the letter briefly, then flip everything back down.
+    LaunchedEffect(view.wrong) {
+        if (view.wrong) { delay(900); onMove(move("hide")) }
+    }
+    val locked = busy || view.wrong
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            "Flip the letters in ABC order",
+            color = Theme.Ink, fontSize = 17.sp, fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
+
+        // The ordered ladder: done letters filled, the next one outlined.
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), modifier = Modifier.fillMaxWidth()) {
+            view.order.forEachIndexed { i, l ->
+                val done = i < view.progress
+                val next = i == view.progress && !view.wrong
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (done) Theme.Green else if (next) Theme.Blue.copy(alpha = 0.15f) else Theme.Ink.copy(alpha = 0.06f))
+                        .border(if (next) 2.dp else 0.dp, if (next) Theme.Blue else Color.Transparent, RoundedCornerShape(8.dp)),
+                ) {
+                    Text(l, color = if (done) Color.White else if (next) Theme.Blue else Theme.Ink.copy(alpha = 0.4f), fontSize = 14.sp, fontWeight = FontWeight.Black)
+                }
+            }
+        }
+
+        // The 3×3 grid (built by hand so it lives happily inside a scroll).
+        view.cards.chunked(3).forEach { rowCards ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                rowCards.forEach { c ->
+                    val up = c.faceUp
+                    val correct = up && !c.wrong
+                    val shape = RoundedCornerShape(16.dp)
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clip(shape)
+                            .background(when { c.wrong -> Theme.Red.copy(alpha = 0.15f); up -> Color.White; else -> Theme.Blue })
+                            .border(width = if (correct) 2.5.dp else 0.dp, color = if (correct) Theme.Green else Color.Transparent, shape = shape)
+                            .let { if (!locked && !up) it.clickable { onMove(JSONObject().put("type", "flip").put("cardId", c.id)) } else it },
+                    ) {
+                        if (up) {
+                            Text(c.letter, color = if (c.wrong) Theme.Red else Theme.Green, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                        } else {
+                            Text("?", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+            }
+        }
+
+        Text(
+            "${view.progress}/${view.total} in order",
+            color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
 /* ----------------------------- Card Showdown ----------------------------- */
 
 @Composable

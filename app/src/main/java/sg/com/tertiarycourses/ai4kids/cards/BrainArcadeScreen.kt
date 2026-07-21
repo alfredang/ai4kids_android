@@ -1,5 +1,6 @@
 package sg.com.tertiarycourses.ai4kids.cards
 
+import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,7 +40,7 @@ import sg.com.tertiarycourses.ai4kids.ui.components.softShadow
 import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
 
 /**
- * The online Brain Arcade. Gates on sign-in, then shows the six card games.
+ * The online Brain Arcade. Gates on sign-in, then shows the card games.
  * Picking one opens [CardGameScreen]. Android port of the web `CardGamesHub`.
  */
 @Composable
@@ -81,17 +83,20 @@ fun BrainArcadeScreen(onClose: () -> Unit) {
     // rest plus host/join multiplayer.
     val games = if (loggedIn) CARD_GAMES else CARD_GAMES.filter { it.modes.contains(CardMode.SOLO) }
 
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Theme.Background),
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 280.dp),
+            // Smaller min cell in landscape packs more columns (fewer rows to scroll).
+            columns = GridCells.Adaptive(minSize = if (landscape) 240.dp else 280.dp),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(if (landscape) 14.dp else 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (landscape) 12.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (landscape) 12.dp else 16.dp),
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column {
@@ -105,22 +110,22 @@ fun BrainArcadeScreen(onClose: () -> Unit) {
                             }) { Text("Sign out", color = Theme.Ink.copy(alpha = 0.55f)) }
                         }
                     }
-                    Spacer(Modifier.size(8.dp))
-                    Text("🕹️ Brain Arcade", color = Theme.Ink, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.size(if (landscape) 2.dp else 8.dp))
+                    Text("🕹️ Brain Arcade", color = Theme.Ink, fontSize = if (landscape) 26.sp else 34.sp, fontWeight = FontWeight.Black)
                     Text(
                         if (loggedIn) "Quick card games — play solo, team up, or race your friends with a room code."
                         else "Quick card games you can play right now, on your own.",
                         color = Theme.Ink.copy(alpha = 0.65f),
-                        fontSize = 16.sp,
+                        fontSize = if (landscape) 13.sp else 16.sp,
                     )
                     if (!loggedIn) {
-                        Spacer(Modifier.size(12.dp))
+                        Spacer(Modifier.size(if (landscape) 8.dp else 12.dp))
                         LoginPrompt(onLogin = { showGate = true })
                     }
                 }
             }
             items(games, key = { it.slug }) { game ->
-                GameCard(game = game, onClick = { selected = game })
+                GameCard(game = game, compact = landscape, onClick = { selected = game })
             }
         }
     }
@@ -142,22 +147,22 @@ private fun LoginPrompt(onLogin: () -> Unit) {
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
             Text("Log in for more games", color = Theme.Ink, fontSize = 16.sp, fontWeight = FontWeight.Black)
-            Text("Unlock all 6 games and play with friends using a room code.", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text("Unlock every game and play with friends using a room code.", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 13.sp)
         }
         Text("Log in ▶", color = Theme.Purple, fontSize = 15.sp, fontWeight = FontWeight.Black)
     }
 }
 
 @Composable
-private fun GameCard(game: CardGameMeta, onClick: () -> Unit) {
+private fun GameCard(game: CardGameMeta, onClick: () -> Unit, compact: Boolean = false) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 190.dp)
+            .heightIn(min = if (compact) 150.dp else 190.dp)
             .kidCard()
             .clickable(onClick = onClick)
-            .padding(20.dp),
+            .padding(if (compact) 14.dp else 20.dp),
     ) {
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
             Box(

@@ -26,10 +26,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import android.content.res.Configuration
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
@@ -40,6 +42,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import sg.com.tertiarycourses.ai4kids.data.LocalProgressStore
 import sg.com.tertiarycourses.ai4kids.ui.components.CloseButton
 import sg.com.tertiarycourses.ai4kids.ui.components.KidButton
 import sg.com.tertiarycourses.ai4kids.ui.components.StarBadge
@@ -147,6 +150,8 @@ fun CardGameScreen(game: CardGameMeta, loggedIn: Boolean, onClose: () -> Unit) {
         }
     }
 
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -170,10 +175,14 @@ fun CardGameScreen(game: CardGameMeta, loggedIn: Boolean, onClose: () -> Unit) {
             }
 
             // Game content — vertically centred in the remaining space, and
-            // scrollable when a board is taller than the screen.
+            // scrollable when a board is taller than the screen. In landscape the
+            // board is capped narrower (and centred) so its width-sized cards stay a
+            // sensible size instead of ballooning to fill the wide canvas.
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .widthIn(max = if (landscape) 460.dp else 760.dp)
+                    .align(Alignment.CenterHorizontally)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
@@ -385,15 +394,27 @@ private fun Results(state: CardState, onAgain: () -> Unit) {
     val youWon = state.winners.firstOrNull() == state.you
     val solo = state.mode == "solo"
     val coop = state.mode == "coop"
+    // A solo game that finished with no winner = the player ran out of time.
+    val soloLost = solo && state.winners.isEmpty()
+    // Tiered star reward: a solo/co-op clear earns a flat 2; versus rewards placing
+    // (1st = 3, 2nd = 2, anyone else who finished = 1). Awarded once per result.
+    val earned = when {
+        soloLost -> 0
+        solo || coop -> 2
+        else -> when (state.winners.indexOf(state.you)) { 0 -> 3; 1 -> 2; else -> 1 }
+    }
+    val progress = LocalProgressStore.current
+    LaunchedEffect(Unit) { progress.award(earned, "arcade") }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth().kidCard().padding(28.dp),
     ) {
-        Text(if (youWon || coop || solo) "🏆" else "🎉", fontSize = 56.sp)
+        Text(if (soloLost) "😮" else if (youWon || coop || solo) "🏆" else "🎉", fontSize = 56.sp)
         Text(
             when {
+                soloLost -> "So close!"
                 solo -> "You did it!"
                 coop -> "You cleared it together!"
                 youWon -> "You win! 🎉"
@@ -402,8 +423,11 @@ private fun Results(state: CardState, onAgain: () -> Unit) {
             color = Theme.Ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center,
         )
 
+        if (earned > 0) {
+            StarBadge(count = earned)
+            Text("+$earned ${if (earned == 1) "star" else "stars"}", color = Theme.Orange, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
         if (solo && state.bestMs != null) {
-            StarBadge(count = 0)
             Text("🏆 Best: ${fmtTime(state.bestMs)}", color = Theme.Orange, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
 
@@ -456,6 +480,10 @@ private fun Board(state: CardState, busy: Boolean, onMove: (JSONObject) -> Unit)
             is BeatDieView -> BeatDieBoard(game, busy, onMove)
             is ShowdownView -> ShowdownBoard(game, state.players, busy, onMove)
             is MatchColoursView -> MatchColoursBoard(game, state.players, busy, onMove)
+            is MakeTenView -> MakeTenBoard(game, busy, onMove)
+            is WheelView -> WheelBoard(game, busy, onMove)
+            is OddOneView -> OddOneOutBoard(game, busy, onMove)
+            is SeqView -> AlphabetLockBoard(game, busy, onMove)
             else -> Text("Loading…", color = Theme.Ink.copy(alpha = 0.5f))
         }
     }

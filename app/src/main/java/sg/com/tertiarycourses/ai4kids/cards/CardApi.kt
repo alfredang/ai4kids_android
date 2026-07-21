@@ -1,6 +1,9 @@
 package sg.com.tertiarycourses.ai4kids.cards
 
 import android.content.Context
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.FormBody
@@ -27,6 +30,7 @@ import java.util.concurrent.TimeUnit
 object CardApi {
 
     private const val PREFS = "ai4kids.cards"
+    private const val SECURE_PREFS = "ai4kids.cards.secure"
     private const val KEY_BASE = "baseUrl"
     private const val KEY_SESSION_COOKIE = "sessionCookie" // "name\tvalue"
     private const val DEFAULT_BASE = "https://ai4kids.tertiarycourses.com.sg"
@@ -52,7 +56,9 @@ object CardApi {
         }
     }
 
-    private val client: OkHttpClient by lazy {
+    // Shared with EscapeApi (co-op escape rooms) so the same NextAuth session
+    // cookie authenticates both features.
+    internal val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -67,6 +73,33 @@ object CardApi {
     }
 
     private fun prefs() = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /**
+     * Keystore-backed prefs holding only the auth session cookie, so the
+     * credential never sits in plaintext on disk. Built lazily; if the keyset is
+     * unreadable (e.g. the encrypted file was restored onto a device whose
+     * Keystore master key can't be recovered) we wipe and rebuild it — the
+     * learner just signs in again rather than the app crashing.
+     */
+    private val securePrefs: SharedPreferences by lazy {
+        runCatching { buildSecurePrefs() }.getOrElse {
+            appContext.deleteSharedPreferences(SECURE_PREFS)
+            buildSecurePrefs()
+        }
+    }
+
+    private fun buildSecurePrefs(): SharedPreferences {
+        val masterKey = MasterKey.Builder(appContext)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            appContext,
+            SECURE_PREFS,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }
 
     var baseUrl: String
         get() = prefs().getString(KEY_BASE, DEFAULT_BASE) ?: DEFAULT_BASE
@@ -84,7 +117,7 @@ object CardApi {
 
     fun logout() {
         synchronized(cookieStore) { cookieStore.clear() }
-        prefs().edit().remove(KEY_SESSION_COOKIE).apply()
+        securePrefs.edit().remove(KEY_SESSION_COOKIE).apply()
     }
 
     /* ---- Local solo best times (offline play, no sign-in needed) ---- */
@@ -102,11 +135,17 @@ object CardApi {
     }
 
     private fun persistSessionCookie(c: Cookie) {
-        prefs().edit().putString(KEY_SESSION_COOKIE, "${c.name}\t${c.value}").apply()
+        securePrefs.edit().putString(KEY_SESSION_COOKIE, "${c.name}\t${c.value}").apply()
     }
 
     private fun restoreSessionCookie() {
-        val saved = prefs().getString(KEY_SESSION_COOKIE, null) ?: return
+        // One-time migration: an earlier build stored the cookie in plaintext
+        // prefs. Move it into the encrypted store, then scrub the old copy.
+        prefs().getString(KEY_SESSION_COOKIE, null)?.let { legacy ->
+            securePrefs.edit().putString(KEY_SESSION_COOKIE, legacy).apply()
+            prefs().edit().remove(KEY_SESSION_COOKIE).apply()
+        }
+        val saved = securePrefs.getString(KEY_SESSION_COOKIE, null) ?: return
         val (name, value) = saved.split("\t", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
         if (value.isEmpty()) return
         val url = baseUrl.toHttpUrlOrNull() ?: return

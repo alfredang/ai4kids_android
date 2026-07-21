@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup & device-transfer rules (Android 12 / API 31 and above).
+  Exclude the encrypted auth-session prefs (and their Tink keyset) from both
+  cloud backup and device-to-device transfer: the Keystore master key that
+  decrypts them is device-bound and can't move, so a transferred copy would be
+  undecryptable. Excluding it makes the learner re-sign-in instead.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="ai4kids.cards.secure.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="ai4kids.cards.secure.xml" />
+    </device-transfer>
+</data-extraction-rules>

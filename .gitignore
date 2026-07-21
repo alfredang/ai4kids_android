@@ -1,5 +1,6 @@
 *.iml
 .gradle
+/.kotlin
 /local.properties
 /.idea/*
 .DS_Store
@@ -18,3 +19,6 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+
+# LibGDX native libraries extracted by the copyGdxNatives task
+/app/src/main/jniLibs/

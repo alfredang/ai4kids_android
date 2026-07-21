@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules (Android 11 / API 30 and below).
+  The encrypted auth-session prefs (and their Tink keyset) must NOT be backed up:
+  the Keystore master key that decrypts them can't be restored onto another
+  device, so a restored copy would be undecryptable. Exclude it so the learner
+  simply signs in again after a restore instead of hitting a broken session.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="ai4kids.cards.secure.xml" />
+</full-backup-content>
