@@ -72,6 +72,13 @@ private const val BUDDY_SYSTEM =
         "Never discuss anything scary, violent, sexual, or unsafe. If asked something inappropriate, gently " +
         "redirect to something fun. No links, no complex words."
 
+/** Leading "Buddy:" / "Child:" role labels the model sometimes echoes from the
+ *  replayed transcript. Stripped before the reply is stored/spoken — otherwise the
+ *  prefixed reply feeds back into the transcript and grows "Buddy: Buddy: …" each
+ *  turn. (No read-side strip needed as on web: this history is in-memory only, so
+ *  the write-side strip already keeps every stored turn clean.) */
+private val LEADING_LABEL = Regex("^(?:\\s*(?:buddy|child)\\s*:\\s*)+", RegexOption.IGNORE_CASE)
+
 private data class Turn(val fromUser: Boolean, val text: String)
 
 /**
@@ -126,8 +133,9 @@ fun TalkingBuddyScreen(onClose: () -> Unit) {
             val convo = (history + Turn(true, m)).takeLast(10).joinToString("\n\n") {
                 (if (it.fromUser) "Child: " else "Buddy: ") + it.text.trim()
             }
-            val reply = GeminiClient.generateReply(BUDDY_SYSTEM, convo, model = GeminiClient.FLASH_LITE)
-                ?: "Hmm, my ears are sleepy! Can you say that again?"
+            val fallback = "Hmm, my ears are sleepy! Can you say that again?"
+            val raw = GeminiClient.generateReply(BUDDY_SYSTEM, convo, model = GeminiClient.FLASH_LITE) ?: fallback
+            val reply = LEADING_LABEL.replace(raw, "").trim().ifEmpty { fallback }
             messages = messages + Turn(fromUser = false, text = reply)
             busy = false
             voice.speak(reply)

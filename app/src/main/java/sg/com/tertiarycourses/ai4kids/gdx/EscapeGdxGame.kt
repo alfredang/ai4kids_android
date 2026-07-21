@@ -17,9 +17,11 @@ import com.badlogic.gdx.utils.viewport.FitViewport
 import sg.com.tertiarycourses.ai4kids.escape.CoopSession
 import sg.com.tertiarycourses.ai4kids.escape.EscapeState
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * The Robot Lab — a top-down LibGDX escape room, rebuilt from the Robot Lab in
@@ -81,6 +83,27 @@ class EscapeGdxGame(
     private val cGood = Color(0.20f, 0.78f, 0.45f, 1f)
     private val cSlot = Color(0.86f, 0.86f, 0.92f, 1f)
     private val cOpen = Color(0.93f, 0.93f, 0.97f, 1f)
+
+    // Floor-texture overlay palette (subtle grooves/highlights painted over each
+    // room's floor fill — the LibGDX counterpart to the web rooms' FLOOR_TEXTURE).
+    private val texGroove = Color(0f, 0f, 0f, 0.20f)      // generic dark seam/joint
+    private val texStone = Color(0.30f, 0.18f, 0.08f, 0.22f) // warm flagstone joint
+    private val texWood = Color(0.20f, 0.10f, 0.02f, 0.24f)  // plank seam
+    private val texHi = Color(0.90f, 0.92f, 1f, 0.10f)   // top-left tread highlight
+    private val texLo = Color(0f, 0f, 0f, 0.18f)         // bottom-right tread shade
+    private val texMottle = Color(0f, 0f, 0f, 0.05f)     // soft slab mottle
+    private val texPanel = Color(0.46f, 0.50f, 0.92f, 0.16f)  // indigo hero-HQ lattice
+    private val texPanelDot = Color(0.60f, 0.64f, 1f, 0.22f)  // lattice node
+    private val texGrout = Color(0f, 0f, 0f, 0.12f)      // fine ceramic grout
+    private val texBandLo = Color(0f, 0f, 0f, 0.05f)     // plank shade band (dark row)
+    private val texBandHi = Color(1f, 1f, 1f, 0.03f)     // plank shade band (light row)
+    // Grass floor: a green lawn wash + soft two-tone mottle, then tufts of blades.
+    private val grassWash = Color(0.22f, 0.44f, 0.14f, 0.62f)
+    private val grassMottleLo = Color(0.10f, 0.28f, 0.05f, 0.30f)
+    private val grassMottleHi = Color(0.46f, 0.63f, 0.22f, 0.24f)
+    private val grassCols = arrayOf(
+        Color(0.18f, 0.34f, 0.06f, 0.7f), Color(0.28f, 0.47f, 0.08f, 0.7f), Color(0.50f, 0.66f, 0.20f, 0.65f),
+    )
 
     // Distinct colours for the 8 shape pictograms (cipher symbols & decoy icons).
     private val glyphColors = arrayOf(
@@ -1476,6 +1499,9 @@ class EscapeGdxGame(
         /** Gate this station until *all* of these rooms are solved (e.g. the exit
          *  cipher needs every clue-bearing station first). */
         val requiresAll: List<String> = emptyList(),
+        /** Override the level's floor texture for this room (else [EscapeLevel.floorKind]).
+         *  One of: metal / concrete / stone / wood / grass / tile / panel. */
+        val floorKind: String? = null,
     )
     private data class RoomCell(val title: String, val x: Float, val y: Float, val w: Float, val h: Float, val floor: Color)
     /** A crossword row: its clue [num], answer [word], and grid [offset] (start column). */
@@ -1511,6 +1537,10 @@ class EscapeGdxGame(
         /** Every room floor is nudged toward this hue so the level's floors share a
          *  theme while each room keeps its own lightness. */
         val floorTint: Color = Color(0.33f, 0.34f, 0.44f, 1f),
+        /** The level's default floor texture (a room may override via its own
+         *  [GridRoom.floorKind]). Ported from the web escape rooms' `floorKind`:
+         *  metal / concrete / stone / wood / grass / tile / panel. */
+        val floorKind: String = "tile",
         /** Puzzle-panel chrome: [card] is the (light) surface dark text reads on,
          *  [cardBar] the header band + border, [cardBtn] the close button + emblem. */
         val card: Color = Color.WHITE,
@@ -1531,7 +1561,7 @@ class EscapeGdxGame(
     private val robotLab = EscapeLevel(
         name = "Robot Lab", gridCols = 3, gridRows = 3,
         bg = Color(0.10f, 0.14f, 0.24f, 1f), // cool steel-blue tech lab
-        floorTint = Color(0.24f, 0.34f, 0.50f, 1f),
+        floorTint = Color(0.24f, 0.34f, 0.50f, 1f), floorKind = "metal",
         card = Color(0.88f, 0.90f, 0.95f, 1f), cardBar = Color(0.70f, 0.77f, 0.88f, 1f), cardBtn = Color(0.38f, 0.55f, 0.80f, 1f), // brushed steel
         rooms = listOf(
             GridRoom("entrance", "Entrance", null, floorColor(0), gx = 0, gy = 0),
@@ -1566,7 +1596,7 @@ class EscapeGdxGame(
     private val vault = EscapeLevel(
         name = "History Vault", gridCols = 3, gridRows = 3,
         bg = Color(0.17f, 0.13f, 0.09f, 1f), // warm sepia heritage vault
-        floorTint = Color(0.44f, 0.36f, 0.22f, 1f),
+        floorTint = Color(0.44f, 0.36f, 0.22f, 1f), floorKind = "stone",
         card = Color(0.96f, 0.92f, 0.82f, 1f), cardBar = Color(0.86f, 0.74f, 0.50f, 1f), cardBtn = Color(0.72f, 0.52f, 0.28f, 1f), // parchment + brass
         rooms = listOf(
             GridRoom("hall", "Heritage Hall", null, floorColor(0), gx = 0, gy = 0, gw = 3, gh = 1),  // wide entrance
@@ -1591,7 +1621,7 @@ class EscapeGdxGame(
     private val tower = EscapeLevel(
         name = "Superhero Tower", gridCols = 2, gridRows = 4,
         bg = Color(0.15f, 0.12f, 0.24f, 1f), // twilight indigo castle
-        floorTint = Color(0.38f, 0.30f, 0.50f, 1f),
+        floorTint = Color(0.38f, 0.30f, 0.50f, 1f), floorKind = "panel",
         card = Color(0.97f, 0.96f, 0.99f, 1f), cardBar = Color(0.78f, 0.72f, 0.93f, 1f), cardBtn = Color(0.86f, 0.32f, 0.42f, 1f), // comic page
         rooms = listOf(
             GridRoom("foyer", "Foyer", null, floorColor(0), gx = 0, gy = 0, gw = 2),          // wide
@@ -1623,7 +1653,7 @@ class EscapeGdxGame(
     private val annex = EscapeLevel(
         name = "Green Workshop", gridCols = 3, gridRows = 3,                                   // L-shaped (2 voids)
         bg = Color(0.08f, 0.16f, 0.12f, 1f), // dark forest green eco-lab
-        floorTint = Color(0.22f, 0.44f, 0.30f, 1f),
+        floorTint = Color(0.22f, 0.44f, 0.30f, 1f), floorKind = "concrete",
         card = Color(0.91f, 0.95f, 0.87f, 1f), cardBar = Color(0.72f, 0.85f, 0.66f, 1f), cardBtn = Color(0.34f, 0.66f, 0.42f, 1f), // recycled-green paper
         rooms = listOf(
             GridRoom("lobby", "Lobby", null, floorColor(0), gx = 0, gy = 0),
@@ -1660,7 +1690,7 @@ class EscapeGdxGame(
     private val bigHall = EscapeLevel(
         name = "Lion City Carnival", gridCols = 3, gridRows = 3,                                  // + shape (3 voids)
         bg = Color(0.18f, 0.10f, 0.12f, 1f), // festive deep maroon (Lion City)
-        floorTint = Color(0.48f, 0.28f, 0.26f, 1f),
+        floorTint = Color(0.48f, 0.28f, 0.26f, 1f), floorKind = "tile",
         card = Color(0.98f, 0.95f, 0.87f, 1f), cardBar = Color(0.94f, 0.80f, 0.48f, 1f), cardBtn = Color(0.86f, 0.34f, 0.36f, 1f), // cream + gold trim
         rooms = listOf(
             GridRoom("hall", "Grand Hall", "Crossword", floorColor(2), Color(0.95f, 0.80f, 0.22f, 1f), gx = 1, gy = 1,  // central hub
@@ -1680,10 +1710,10 @@ class EscapeGdxGame(
                 clue = "2 = DIWALI"),
             GridRoom("flower", "Gardens", "Gardens", floorColor(3), Color(0.66f, 0.48f, 0.92f, 1f), gx = 2, gy = 1,
                 puzzle = Mcq("Gardens", "What is Singapore's national flower?", listOf("Orchid", "Rose", "Tulip")),
-                clue = "3 = ORCHID"),
+                clue = "3 = ORCHID", floorKind = "grass"),
             GridRoom("fruit", "Fruit Stall", "Fruit Stall", floorColor(4), Color(0.30f, 0.78f, 0.45f, 1f), gx = 1, gy = 2,
                 puzzle = Cipher(listOf('D', 'U', 'R', 'I', 'A', 'N', 'O', 'S'), "DURIAN"),
-                clue = "4 = DURIAN"),
+                clue = "4 = DURIAN", floorKind = "wood"),
             GridRoom("exit", "Exit Panel", "Exit Panel", floorColor(5), cGood, gx = 2, gy = 2,
                 puzzle = SymbolLock("LION"),
                 requires = "hall"),
@@ -2231,6 +2261,123 @@ class EscapeGdxGame(
         if (clean) smooth.circle(batch, cx + s * 0.16f, cy - s * 0.1f, s * 0.16f, Color(1f, 1f, 1f, 0.9f))      // sparkle
     }
 
+    /* ----------------------- floor textures ---------------------------- */
+
+    /** The floor texture kind for room [idx] (its own override, else the level's). */
+    private fun floorKindOf(idx: Int): String = rooms[idx].floorKind ?: currentLevel.floorKind
+
+    /** Paint a subtle repeating floor texture over a room's floor fill — the
+     *  LibGDX counterpart to the web rooms' `FLOOR_TEXTURE`. Drawn in the shapes
+     *  pass (so it sits under the walls, props, station and player), and only for
+     *  the room in view (every other room is fogged over anyway). All strokes are
+     *  clamped inside the cell so nothing bleeds into a neighbour. Expects [shapes]
+     *  to be mid `ShapeType.Filled`. */
+    private fun drawFloorTexture(c: RoomCell, kind: String) {
+        when (kind) {
+            "metal" -> floorMetal(c)                                  // tread plate + studs
+            "concrete" -> { seamGrid(c, 116f, texGroove, 2f); floorMottle(c, 3) }
+            "stone" -> { seamGrid(c, 100f, texStone, 2f); floorMottle(c, 3) }
+            "tile" -> seamGrid(c, 30f, texGrout, 1f)                  // fine ceramic grout
+            "wood" -> floorWood(c)                                    // plank seams
+            "grass" -> floorGrass(c)                                  // scattered blades
+            "panel" -> floorPanel(c)                                  // indigo tech lattice
+        }
+    }
+
+    /** Continuous grid of thin seams at [pitch], clamped inside the cell. */
+    private fun seamGrid(c: RoomCell, pitch: Float, color: Color, th: Float) {
+        shapes.color = color
+        var x = c.x + pitch
+        while (x < c.x + c.w) { shapes.rect(x - th / 2f, c.y, th, c.h); x += pitch }
+        var y = c.y + pitch
+        while (y < c.y + c.h) { shapes.rect(c.x, y - th / 2f, c.w, th); y += pitch }
+    }
+
+    /** A few big, faint dark blobs — the poured-slab / flagstone mottle. */
+    private fun floorMottle(c: RoomCell, n: Int) {
+        shapes.color = texMottle
+        var seed = (c.x.toInt() * 73856093) xor (c.y.toInt() * 19349663)
+        fun rnd(): Float { seed = seed * 1103515245 + 12345; return ((seed ushr 16) and 0x7fff) / 32768f }
+        repeat(n) { shapes.circle(c.x + rnd() * c.w, c.y + rnd() * c.h, 40f + rnd() * 40f) }
+    }
+
+    /** Metal tread plate: a plate grid plus an embossed diamond stud per plate. */
+    private fun floorMetal(c: RoomCell) {
+        val pitch = 40f
+        seamGrid(c, pitch, Color(0f, 0f, 0f, 0.22f), 1.5f)
+        val r = 5f
+        var gy = c.y + pitch / 2f
+        while (gy < c.y + c.h) {
+            var gx = c.x + pitch / 2f
+            while (gx < c.x + c.w) {
+                if (gx - r > c.x && gx + r < c.x + c.w && gy - r > c.y && gy + r < c.y + c.h) {
+                    shapes.color = texHi // top edges catch the light
+                    shapes.rectLine(gx - r, gy, gx, gy + r, 1.2f)
+                    shapes.rectLine(gx, gy + r, gx + r, gy, 1.2f)
+                    shapes.color = texLo // bottom edges fall into shade
+                    shapes.rectLine(gx + r, gy, gx, gy - r, 1.2f)
+                    shapes.rectLine(gx, gy - r, gx - r, gy, 1.2f)
+                }
+                gx += pitch
+            }
+            gy += pitch
+        }
+    }
+
+    /** Wooden planks: horizontal seams with a faint two-row shade banding. */
+    private fun floorWood(c: RoomCell) {
+        var y = c.y + 15f
+        var band = 0
+        while (y < c.y + c.h) {
+            shapes.color = texWood
+            shapes.rect(c.x, y - 0.6f, c.w, 1.2f)
+            shapes.color = if (band % 2 == 0) texBandLo else texBandHi
+            shapes.rect(c.x, y, c.w, minOf(15f, c.y + c.h - y))
+            y += 15f; band++
+        }
+    }
+
+    /** A grass lawn: a green wash over the (themed) floor fill, soft two-tone
+     *  mottle for depth, then tufts of blades — seeded from the cell so the turf
+     *  is stable frame to frame (never a grid, never boxes a prop). */
+    private fun floorGrass(c: RoomCell) {
+        var seed = (c.x.toInt() * 73856093) xor (c.y.toInt() * 19349663)
+        fun rnd(): Float { seed = seed * 1103515245 + 12345; return ((seed ushr 16) and 0x7fff) / 32768f }
+        // Green lawn base — the room's fill is themed maroon, so grass needs its own green.
+        shapes.color = grassWash
+        shapes.rect(c.x, c.y, c.w, c.h)
+        shapes.color = grassMottleLo
+        repeat(4) { shapes.circle(c.x + rnd() * c.w, c.y + rnd() * c.h, 30f + rnd() * 36f) }
+        shapes.color = grassMottleHi
+        repeat(3) { shapes.circle(c.x + rnd() * c.w, c.y + rnd() * c.h, 26f + rnd() * 30f) }
+        // Tufts — three fanned blades from a shared base, so it reads as clumps of
+        // grass rather than scattered dashes.
+        val tufts = ((c.w * c.h) / 1500f).toInt().coerceIn(14, 60)
+        repeat(tufts) {
+            val bx = c.x + 8f + rnd() * (c.w - 16f)
+            val by = c.y + 6f + rnd() * (c.h - 18f)
+            for (k in -1..1) {
+                val lean = k * 2.3f + (rnd() - 0.5f) * 1.6f
+                val len = 6f + rnd() * 5f
+                shapes.color = grassCols[(rnd() * grassCols.size).toInt().coerceIn(0, grassCols.size - 1)]
+                shapes.rectLine(bx, by, bx + lean, by + len, 1.8f)
+            }
+        }
+    }
+
+    /** Hero-HQ tech floor: an indigo lattice (grid + glowing nodes at the joints). */
+    private fun floorPanel(c: RoomCell) {
+        val pitch = 34f
+        seamGrid(c, pitch, texPanel, 1.2f)
+        shapes.color = texPanelDot
+        var gy = c.y + pitch
+        while (gy < c.y + c.h - 2f) {
+            var gx = c.x + pitch
+            while (gx < c.x + c.w - 2f) { shapes.circle(gx, gy, 2.2f); gx += pitch }
+            gy += pitch
+        }
+    }
+
     /* ------------------------ themed floor decor ----------------------- */
 
     /** Faded, non-interactive props themed to the room, set in two opposite
@@ -2246,8 +2393,8 @@ class EscapeGdxGame(
             "Solar Panel" -> { decorSolarPanel(x1, y1, 15f); decorPlant(x2, y2, 13f) }
             "Recycling Plant" -> { decorBin(x1, y1, 15f); decorPlant(x2, y2, 12f) }
             "Power Circuit" -> { decorBulb(x1, y1, 15f); decorBattery(x2, y2, 11f) }
-            "Hawker Stall" -> { decorBowl(x1, y1, 16f); decorDrink(x2, y2, 13f) }
-            "Little India" -> { decorLamp(x1, y1, 15f); decorLamp(x2, y2, 12f) }
+            "Hawker Stall" -> { decorBowl(x1, y1, 16f); decorStool(x2, y2, 14f) }
+            "Little India" -> { decorRangoli(x1, y1, 15f); decorDiya(x2, y2, 13f) }
             "Gardens" -> { decorPlant(x1, y1, 15f); decorPlant(x2, y2, 12f) }
             "Fruit Stall" -> { decorFruit(x1, y1, 14f, 3); decorFruit(x2, y2, 12f, 1) }
             "Grand Hall", "Lion City Room" -> { decorLantern(x1, y1, 15f); decorLantern(x2, y2, 11f) }
@@ -2333,20 +2480,49 @@ class EscapeGdxGame(
         smooth.line(batch, sx + s * 0.2f, sy + s * 0.7f, sx, sy + s * 1.05f, 2.5f, c)
     }
 
-    private fun decorDrink(x: Float, y: Float, s: Float) {
-        val cup = Color(0.55f, 0.78f, 0.88f, 0.5f)   // translucent cup
-        val tea = Color(0.78f, 0.52f, 0.34f, 0.55f)  // drink
-        val pearl = Color(0.24f, 0.18f, 0.20f, 0.6f) // bubble-tea pearls
-        smooth.rect(batch, x - s * 0.6f, y - s, 1.2f * s, 1.85f * s, cup)        // cup
-        smooth.rect(batch, x - s * 0.55f, y - s, 1.1f * s, s * 0.95f, tea)       // drink fill
-        smooth.circle(batch, x - s * 0.25f, y - s * 0.8f, s * 0.13f, pearl)
-        smooth.circle(batch, x + s * 0.12f, y - s * 0.85f, s * 0.13f, pearl)
-        smooth.line(batch, x + s * 0.25f, y + s * 0.95f, x - s * 0.1f, y - s * 0.55f, s * 0.16f, Color(0.92f, 0.40f, 0.45f, 0.6f)) // straw
+    /** A round wooden hawker stool: a flat seat on three splayed legs. */
+    private fun decorStool(x: Float, y: Float, s: Float) {
+        val seat = Color(0.82f, 0.52f, 0.18f, 0.6f)   // warm wood top
+        val leg = Color(0.55f, 0.30f, 0.10f, 0.6f)    // darker legs
+        // Three legs splaying down from under the seat.
+        smooth.line(batch, x - s * 0.5f, y + s * 0.2f, x - s * 0.72f, y - s * 0.9f, s * 0.16f, leg)
+        smooth.line(batch, x + s * 0.5f, y + s * 0.2f, x + s * 0.72f, y - s * 0.9f, s * 0.16f, leg)
+        smooth.line(batch, x, y + s * 0.2f, x, y - s * 0.95f, s * 0.16f, leg)
+        // Seat — a rounded flat disc (a thick round-capped bar reads as an ellipse).
+        smooth.line(batch, x - s * 0.85f, y + s * 0.32f, x + s * 0.85f, y + s * 0.32f, s * 0.5f, Color(0.62f, 0.36f, 0.12f, 0.6f)) // rim shadow
+        smooth.line(batch, x - s * 0.85f, y + s * 0.42f, x + s * 0.85f, y + s * 0.42f, s * 0.42f, seat)                            // seat top
     }
 
-    private fun decorLamp(x: Float, y: Float, s: Float) {
-        smooth.triangle(batch, x - s * 0.45f, y, s * 0.9f, s * 1.2f, Color(1f, 0.85f, 0.40f, 0.7f))
-        smooth.rect(batch, x - s, y - s * 0.5f, 2f * s, s * 0.5f, Color(0.86f, 0.55f, 0.32f, 0.6f))
+    /** A diya — a clay oil lamp with a flame (Diwali / Little India). */
+    private fun decorDiya(x: Float, y: Float, s: Float) {
+        val clay = Color(0.72f, 0.30f, 0.10f, 0.65f)
+        val clayRim = Color(0.55f, 0.20f, 0.07f, 0.65f)
+        smooth.circle(batch, x, y + s * 0.15f, s * 0.95f, Color(1f, 0.88f, 0.50f, 0.22f))                    // warm glow
+        smooth.line(batch, x - s * 0.7f, y - s * 0.2f, x + s * 0.7f, y - s * 0.2f, s * 0.44f, clay)          // clay bowl body
+        smooth.line(batch, x - s * 0.82f, y + s * 0.02f, x + s * 0.82f, y + s * 0.02f, s * 0.16f, clayRim)   // bowl rim
+        smooth.rect(batch, x - s * 0.05f, y + s * 0.05f, s * 0.1f, s * 0.18f, Color(0.30f, 0.15f, 0.05f, 0.7f)) // wick
+        smooth.triangle(batch, x - s * 0.19f, y + s * 0.12f, s * 0.38f, s * 0.72f, Color(0.98f, 0.60f, 0.16f, 0.8f)) // outer flame
+        smooth.triangle(batch, x - s * 0.1f, y + s * 0.2f, s * 0.2f, s * 0.46f, Color(1f, 0.9f, 0.45f, 0.85f))       // inner flame
+    }
+
+    /** A rangoli — a colourful symmetric floor pattern (Diwali). Flat ground detail:
+     *  a ring of dots, a ring of petals and a bright centre bindu. */
+    private fun decorRangoli(x: Float, y: Float, s: Float) {
+        val cols = arrayOf(
+            Color(0.96f, 0.45f, 0.71f, 0.7f), Color(0.98f, 0.75f, 0.20f, 0.7f),
+            Color(0.22f, 0.74f, 0.95f, 0.7f), Color(0.66f, 0.33f, 0.93f, 0.7f),
+        )
+        val tau = 2f * Math.PI.toFloat()
+        for (i in 0 until 12) {
+            val a = i / 12f * tau
+            smooth.circle(batch, x + cos(a) * s * 0.95f, y + sin(a) * s * 0.95f, s * 0.11f, cols[i % 4])   // outer dot ring
+        }
+        for (i in 0 until 8) {
+            val a = i / 8f * tau
+            smooth.circle(batch, x + cos(a) * s * 0.55f, y + sin(a) * s * 0.55f, s * 0.17f, cols[i % 4])   // inner petal ring
+        }
+        smooth.circle(batch, x, y, s * 0.28f, Color(0.98f, 0.80f, 0.13f, 0.75f))                           // centre
+        smooth.circle(batch, x, y, s * 0.12f, Color(0.86f, 0.15f, 0.15f, 0.8f))                            // bindu
     }
 
     private fun decorPlant(x: Float, y: Float, s: Float) {
@@ -2387,15 +2563,30 @@ class EscapeGdxGame(
                 smooth.circle(batch, x, y, s * 0.18f, Color(0.85f, 0.52f, 0.16f, 0.5f))
                 smooth.circle(batch, x + s * 0.2f, y + s * 0.7f, s * 0.2f, leaf)
             }
-            else -> { // durian — the stall's star: a green spiky shell
-                val d = Color(0.55f, 0.62f, 0.30f, 0.6f)
-                smooth.circle(batch, x, y, s * 0.6f, d)
-                smooth.triangle(batch, x - s * 0.6f, y + s * 0.2f, s * 0.34f, s * 0.5f, d)
-                smooth.triangle(batch, x - s * 0.15f, y + s * 0.4f, s * 0.34f, s * 0.5f, d)
-                smooth.triangle(batch, x + s * 0.3f, y + s * 0.2f, s * 0.34f, s * 0.5f, d)
-                smooth.triangle(batch, x - s * 0.6f, y - s * 0.7f, s * 0.34f, s * 0.5f, d, pointDown = true)
-                smooth.triangle(batch, x - s * 0.15f, y - s * 0.9f, s * 0.34f, s * 0.5f, d, pointDown = true)
-                smooth.triangle(batch, x + s * 0.3f, y - s * 0.7f, s * 0.34f, s * 0.5f, d, pointDown = true)
+            else -> { // durian — the stall's star: a khaki husk ringed with spikes + a stem
+                val husk = Color(0.58f, 0.64f, 0.31f, 0.65f)
+                val spike = Color(0.49f, 0.55f, 0.24f, 0.7f)
+                val rr = s * 0.52f
+                val sw = s * 0.34f; val sh = s * 0.52f
+                val count = 11
+                // Pyramid spikes radiating outward all around the husk (each triangle
+                // rotated to aim its apex away from the centre — the durian's hallmark).
+                for (i in 0 until count) {
+                    val a = (i.toFloat() / count) * 2f * Math.PI.toFloat() - Math.PI.toFloat() / 2f
+                    val rimX = x + cos(a) * rr * 0.86f
+                    val rimY = y + sin(a) * rr * 0.86f
+                    smooth.triangle(
+                        batch, rimX - sw / 2f, rimY, sw, sh, spike,
+                        rotationDeg = a * 180f / Math.PI.toFloat() - 90f, originX = sw / 2f, originY = 0f,
+                    )
+                }
+                smooth.circle(batch, x, y, rr, husk)                                    // husk body
+                smooth.circle(batch, x, y, rr, Color(0.36f, 0.42f, 0.18f, 0.35f))       // rim shade
+                smooth.circle(batch, x, y, rr * 0.82f, husk)
+                // A few facet spikes across the front so the husk reads as segmented.
+                smooth.triangle(batch, x - s * 0.22f, y - s * 0.02f, sw * 0.7f, sh * 0.7f, spike)
+                smooth.triangle(batch, x + s * 0.06f, y - s * 0.12f, sw * 0.7f, sh * 0.7f, spike)
+                smooth.line(batch, x, y + rr * 0.9f, x, y + rr * 1.45f, 2.5f, stem)      // short stem
             }
         }
     }
@@ -3044,6 +3235,9 @@ class EscapeGdxGame(
             shapes.color = floorTmp
             shapes.rect(c.x, c.y, c.w, c.h)
         }
+        // Floor texture for the room in view (others are fogged over below), painted
+        // now so it sits under the walls, door, props, station and player.
+        drawFloorTexture(cells[curIdx], floorKindOf(curIdx))
         shapes.color = wallColor
         walls.forEach { shapes.rect(it[0], it[1], it[2], it[3]) }
 

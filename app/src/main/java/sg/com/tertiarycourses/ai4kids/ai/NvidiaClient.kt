@@ -13,12 +13,13 @@ import sg.com.tertiarycourses.ai4kids.BuildConfig
 import java.util.concurrent.TimeUnit
 
 /**
- * Primary image provider for the AI Art Studio: NVIDIA NIM FLUX.1-dev
- * (build.nvidia.com). Free tier, no billing required — which is why it replaced
- * Nano Banana (Gemini image gen, which needs billing) as the primary. The key
+ * Fallback image provider for the AI Art Studio: NVIDIA NIM FLUX.1-dev
+ * (build.nvidia.com). Free tier, no billing required — it replaced Nano Banana
+ * (Gemini image gen, which needs billing) as the free image path. Cloudflare's
+ * faster Flux-1-schnell is now tried first (see `ArtEngine`); NVIDIA paints only
+ * when Cloudflare is unconfigured or errors — slower but higher fidelity. The key
  * comes from `BuildConfig` (set in git-ignored local.properties); if it's blank
- * this provider is skipped and the caller falls back to Cloudflare Flux. Mirrors
- * the website's `kid-image.ts` NVIDIA path.
+ * this provider is skipped too. Mirrors the website's `kid-image.ts` NVIDIA path.
  */
 object NvidiaClient {
 
