@@ -5,13 +5,23 @@ Guidance for working in this repository.
 ## What this is
 
 Native **Android** port of the AI4Kids iOS app
-([alfredang/ai4kidsapp](https://github.com/alfredang/ai4kidsapp)). A fully
-offline, no-login educational activity app for ages 4–16, built with **Kotlin +
+([alfredang/ai4kidsapp](https://github.com/alfredang/ai4kidsapp)). A tablet-first
+(also runs on phone) educational activity app for ages 4–16, built with **Kotlin +
 Jetpack Compose + Material 3**.
 
-Core principles (carried over from iOS): **no internet, no accounts, no ads, no
-data collection.** Do not add networking, analytics, or third-party SDKs. The
-`AndroidManifest.xml` intentionally requests **no** internet permission.
+Core principles: **no ads, no analytics, no third-party SDKs.** The four learning
+activities and solo card games play **fully offline with no login and no data
+collection**. The **one** exception is the optional online "Brain Arcade"
+multiplayer, which uses INTERNET to talk to the ai4kids backend and signs in with
+a **username-only** kid account (no name/email/phone/location).
+
+**Google Play Families Policy:** the app targets children (Designed for Families),
+so a **parental gate** (`cards/ParentalGate.kt`) guards (1) first launch — a
+one-time parental consent persisted by `data/ConsentStore.kt`, and (2) the Brain
+Arcade sign-in, immediately before any data leaves the device. The Data safety
+declaration must list **User IDs** (the username) as collected for app
+functionality, not shared. Do not add ads, analytics, or SDKs that would break
+Families Policy compliance.
 
 ## Layout
 

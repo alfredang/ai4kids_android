@@ -46,7 +46,26 @@ fun BrainArcadeScreen(onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     var selected by remember { mutableStateOf<CardGameMeta?>(null) }
     var loggedIn by remember { mutableStateOf(CardApi.isLoggedIn()) }
+    var showGate by remember { mutableStateOf(false) }
     var showLogin by remember { mutableStateOf(false) }
+
+    if (showGate) {
+        // Parental gate immediately before sign-in — the only point the app
+        // sends anything to a server (a username + password for the kid account).
+        ParentalGate(
+            headerTitle = "Grown-ups only",
+            cardTitle = "Parental consent to sign in",
+            message = "Signing in to Brain Arcade uses an ai4kids kid account so children can " +
+                "play card games with friends online. It stores only a username — no real name, " +
+                "email, phone number, or location — and there are no ads. Solo and offline games " +
+                "never need an account.\n\n" +
+                "A parent or guardian: please confirm by solving the problem below.",
+            confirmLabel = "I'm a grown-up — continue",
+            onClose = { showGate = false },
+            onConsent = { showGate = false; showLogin = true },
+        )
+        return
+    }
 
     if (showLogin) {
         LoginScreen(onClose = { showLogin = false }, onLoggedIn = { showLogin = false; loggedIn = true })
@@ -96,7 +115,7 @@ fun BrainArcadeScreen(onClose: () -> Unit) {
                     )
                     if (!loggedIn) {
                         Spacer(Modifier.size(12.dp))
-                        LoginPrompt(onLogin = { showLogin = true })
+                        LoginPrompt(onLogin = { showGate = true })
                     }
                 }
             }
