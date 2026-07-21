@@ -36,7 +36,7 @@ The core learning activities are **offline-first** — no login, progress stored
 the device. **Phonics Quest** (spoken "Buddy" hints) and **Story Builder** (freshly-written
 tales) can optionally call Google **Gemini** when an API key is set; both stay fully playable
 offline without it. Two more activities are **AI-powered** — **Talking Buddy** (chat by voice
-or text, via Gemini) and **Art Studio** (an AI-painted picture — NVIDIA FLUX, Cloudflare
+or text, via Gemini) and **Art Studio** (an AI-painted picture — Cloudflare Flux, NVIDIA
 fallback — you turn into a jigsaw) — active when a key is set, and showing a friendly "ask a
 grown-up" screen when it isn't. The **Escape Room** is a top-down puzzle adventure (built with
 LibGDX) you can play solo offline or **co-op** with friends over a room code. The **Brain
@@ -118,7 +118,7 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
 | **Game engine** | LibGDX 1.13.1 (the Escape Room — a self-contained `AndroidApplication`) |
 | **Architecture** | Single-Activity Compose home; the Escape Room runs as a separate LibGDX `Activity`; shared state via `CompositionLocal` |
 | **Audio** | Android `TextToSpeech` (on-device, offline) for Phonics |
-| **AI (optional)** | Google **Gemini** (`gemini-2.5-flash`) for text — Phonics Buddy, Story Builder, Talking Buddy, and story-idea/drawing safety checks. Images via **NVIDIA NIM (FLUX.1-dev)** with a **Cloudflare** Workers AI (Flux) fallback — Art Studio & Story Builder's "Write your own" illustrations |
+| **AI (optional)** | Google **Gemini** (`gemini-2.5-flash`) for text — Phonics Buddy, Story Builder, Talking Buddy, and story-idea/drawing safety checks. Images via **Cloudflare** Workers AI (Flux-1-schnell) with an **NVIDIA NIM (FLUX.1-dev)** fallback — Art Studio & Story Builder's "Write your own" illustrations |
 | **Networking** | OkHttp 4.12.0 (Brain Arcade, co-op Escape, and the optional AI activities) |
 | **Auth** | NextAuth credentials flow, session cookie persisted locally |
 | **Persistence** | `SharedPreferences` (activity + phonics stars, best times, session cookie) |
@@ -164,9 +164,9 @@ app/src/main/java/sg/com/tertiarycourses/ai4kids/
 ├── data/ProgressStore.kt        # Local star tally, persisted to SharedPreferences
 ├── ai/
 │   ├── GeminiClient.kt          # Gemini text/JSON/chat + kid-safety classifiers (Phonics, Story, Buddy)
-│   ├── NvidiaClient.kt          # NVIDIA NIM (FLUX.1-dev) — primary image provider
-│   ├── CloudflareClient.kt      # Cloudflare Workers AI (Flux) image fallback
-│   └── ArtEngine.kt             # Safety-gate + NVIDIA→Cloudflare paint (Art Studio + Story scenes)
+│   ├── NvidiaClient.kt          # NVIDIA NIM (FLUX.1-dev) — image fallback (higher fidelity)
+│   ├── CloudflareClient.kt      # Cloudflare Workers AI (Flux-1-schnell) — primary image provider (fast)
+│   └── ArtEngine.kt             # Safety-gate + Cloudflare→NVIDIA paint (Art Studio + Story scenes)
 ├── ui/
 │   ├── theme/Theme.kt           # Brand palette, shapes, shadows, background gradient
 │   ├── RootScreen.kt            # Home grid of activity cards + Brain Arcade tile
@@ -257,9 +257,9 @@ Leave it blank and the phonics games still work fully offline (just without the 
 
 ### AI Art Studio (optional)
 
-The Art Studio generates pictures from a child's idea. It tries **NVIDIA NIM
-(FLUX.1-dev)** first — free, no billing — then falls back to **Cloudflare Workers AI
-(Flux)**. Add whichever key(s) you have to `local.properties` (git-ignored):
+The Art Studio generates pictures from a child's idea. It tries **Cloudflare Workers AI
+(Flux-1-schnell)** first — fast — then falls back to **NVIDIA NIM (FLUX.1-dev)** (free, no
+billing). Add whichever key(s) you have to `local.properties` (git-ignored):
 
 ```properties
 NVIDIA_API_KEY=nvapi-your_key_here
@@ -290,14 +290,14 @@ that up too.
   child's **own words**: with a key set, the typed idea (up to 300 characters) goes to
   **Gemini** — first to a kid-safety check, then to write a 3-scene story. Each scene is
   then **illustrated** by sending its (AI-written) visual description to the same image
-  providers Art Studio uses — **NVIDIA FLUX** with a **Cloudflare** fallback — and an emoji
+  providers Art Studio uses — **Cloudflare Flux** with an **NVIDIA FLUX** fallback — and an emoji
   stands in while the picture loads or if it can't be painted. Stories are never saved
   off-device. With no key the whole mode stays dormant behind an "ask a grown-up" screen,
   and "Build a story" is unaffected.
 - **Talking Buddy** and **Art Studio** are AI activities: with a key set, **Talking Buddy**
   sends the child's typed/spoken message to Google **Gemini** for a reply, and **Art Studio**
-  sends the child's drawing prompt to Gemini for a kid-safety check, then to **NVIDIA FLUX**
-  (with a **Cloudflare** Workers AI fallback) to paint the picture. Talking Buddy uses
+  sends the child's drawing prompt to Gemini for a kid-safety check, then to **Cloudflare Flux**
+  (with an **NVIDIA FLUX** fallback) to paint the picture. Talking Buddy uses
   Android's **`SpeechRecognizer`** for speech input (which may send audio to Google for
   recognition — we pass `EXTRA_PREFER_OFFLINE`) and on-device `TextToSpeech` for replies.
   With no key they stay dormant behind an "ask a grown-up" screen.
