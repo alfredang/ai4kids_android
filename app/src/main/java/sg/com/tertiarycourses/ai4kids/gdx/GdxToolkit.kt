@@ -113,11 +113,17 @@ class SmoothDraw : Disposable {
         batch.packedColor = prev
     }
 
-    /** An anti-aliased triangle filling ([x],[y],[w],[h]); apex up, or down if [pointDown]. */
-    fun triangle(batch: Batch, x: Float, y: Float, w: Float, h: Float, color: Color, pointDown: Boolean = false) {
+    /** An anti-aliased triangle filling ([x],[y],[w],[h]); apex up, or down if
+     *  [pointDown]. Optionally rotated [rotationDeg] degrees (counter-clockwise)
+     *  about the pivot ([originX],[originY]) measured from ([x],[y]) — e.g. an
+     *  origin of (w/2, 0) pivots about the base centre, to aim a spike outward. */
+    fun triangle(
+        batch: Batch, x: Float, y: Float, w: Float, h: Float, color: Color,
+        pointDown: Boolean = false, rotationDeg: Float = 0f, originX: Float = 0f, originY: Float = 0f,
+    ) {
         val prev = batch.packedColor
         batch.setColor(color)
-        batch.draw(tri, x, y, 0f, 0f, w, h, 1f, 1f, 0f, 0, 0, tri.width, tri.height, false, pointDown)
+        batch.draw(tri, x, y, originX, originY, w, h, 1f, 1f, rotationDeg, 0, 0, tri.width, tri.height, false, pointDown)
         batch.packedColor = prev
     }
 
