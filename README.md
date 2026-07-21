@@ -5,7 +5,7 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-24%20(Android%207.0)-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
-[![Target SDK](https://img.shields.io/badge/Target%20SDK-34-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
+[![Target SDK](https://img.shields.io/badge/Target%20SDK-35-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Build](https://img.shields.io/badge/Build-Gradle%20KTS-02303A?logo=gradle&logoColor=white)](https://gradle.org)
 
 **Play. Learn. Create.** — a bright, friendly activity app for young learners (ages 4–16)
@@ -161,7 +161,9 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
 app/src/main/java/sg/com/tertiarycourses/ai4kids/
 ├── MainActivity.kt              # Entry point; CardApi.init + shared ProgressStore
 ├── model/Activity.kt            # The home activities (title, color, age band, icon)
-├── data/ProgressStore.kt        # Local star tally, persisted to SharedPreferences
+├── data/
+│   ├── ProgressStore.kt         # Local star tally, persisted to SharedPreferences
+│   └── ConsentStore.kt          # One-time parental consent flag (Families Policy)
 ├── ai/
 │   ├── GeminiClient.kt          # Gemini text/JSON/chat + kid-safety classifiers (Phonics, Story, Buddy)
 │   ├── NvidiaClient.kt          # NVIDIA NIM (FLUX.1-dev) — image fallback (higher fidelity)
@@ -197,6 +199,7 @@ app/src/main/java/sg/com/tertiarycourses/ai4kids/
 │   ├── BrainArcadeScreen.kt     # Hub + lobby
 │   ├── CardGameScreen.kt        # In-game screen
 │   ├── LoginScreen.kt           # Sign-in for online play
+│   ├── ParentalGate.kt          # Grown-ups-only math gate before consent/sign-in
 │   └── LocalSolo.kt             # Offline solo play + local best times
 ├── escape/                      # Escape Room lobby + co-op session
 │   ├── EscapeLobbyScreen.kt     # Solo / host / join a co-op room
@@ -303,8 +306,14 @@ that up too.
   With no key they stay dormant behind an "ask a grown-up" screen.
 - `INTERNET` / `ACCESS_NETWORK_STATE` permissions are used by Brain Arcade's online card
   games, **co-op** Escape rooms, and the AI activities (Story Builder, Phonics Buddy,
-  Talking Buddy, Art Studio). `RECORD_AUDIO` is used **only** by Talking Buddy, for
-  on-device speech input.
+  Talking Buddy, Art Studio). `RECORD_AUDIO` is **not declared** in store builds — they
+  ship keyless, so Talking Buddy (the only mic user) is dormant and falls back to typing;
+  re-declare it (with the matching Data safety mic disclosure) only for a keyed voice build.
+- **Google Play Families Policy:** the app targets children (Designed for Families). A
+  **parental gate** (math challenge, `cards/ParentalGate.kt`) guards first launch (one-time
+  consent persisted by `data/ConsentStore.kt`) and every online sign-in point — the Brain
+  Arcade and the co-op Escape Room lobby — immediately before any data leaves the device.
+  No ads, no analytics, no third-party tracking SDKs.
 - The only persisted data is local: star progress, solo best times, and (when signed in)
   the online session cookie — stored **encrypted** (Android Keystore) and excluded from
   backup/transfer.
