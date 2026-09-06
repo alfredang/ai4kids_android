@@ -23,6 +23,7 @@ the source of truth for the Play Store release notes.
 - Various puzzle and phonics fixes.
 
 ### Play submission
+- **Production** — versionCode 5 bundle (rebuild of 1.2, uploaded Aug 7) promoted from closed testing via "Add from library"; full rollout, all 177 countries/regions + rest of world. Submitted for review 2026-08-28 after production access was granted the same day.
 - Closed testing — Alpha track, "All Testers" email list, Singapore. Submitted 2026-07-21.
 - Build ships keyless: Gemini/NVIDIA/Cloudflare AI paths are inactive, so Data safety remains "User IDs only, encrypted in transit, not shared".
 - RECORD_AUDIO permission intentionally not declared (mic feature dormant; Families Policy consistency).

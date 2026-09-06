@@ -37,13 +37,13 @@ val gdxNatives: Configuration by configurations.creating
 
 android {
     namespace = "sg.com.tertiarycourses.ai4kids"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "sg.com.tertiarycourses.ai4kids"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 4
+        targetSdk = 36
+        versionCode = 5
         versionName = "1.2"
 
         vectorDrawables { useSupportLibrary = true }

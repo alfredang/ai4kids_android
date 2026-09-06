@@ -5,12 +5,17 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-24%20(Android%207.0)-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
-[![Target SDK](https://img.shields.io/badge/Target%20SDK-35-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
+[![Target SDK](https://img.shields.io/badge/Target%20SDK-36-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Build](https://img.shields.io/badge/Build-Gradle%20KTS-02303A?logo=gradle&logoColor=white)](https://gradle.org)
+[![Google Play](https://img.shields.io/badge/Google%20Play-Download-414141?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=sg.com.tertiarycourses.ai4kids)
 
 **Play. Learn. Create.** — a bright, friendly activity app for young learners (ages 4–16)
 
-[Website](https://ai4kids.tertiarycourses.com.sg) · [iOS counterpart](https://github.com/alfredang/ai4kidsapp) · [Report Bug](https://github.com/alfredang/ai4kids_android/issues)
+<a href="https://play.google.com/store/apps/details?id=sg.com.tertiarycourses.ai4kids">
+  <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80" />
+</a>
+
+[Google Play](https://play.google.com/store/apps/details?id=sg.com.tertiarycourses.ai4kids) · [Repository](https://github.com/alfredang/ai4kids_android) · [Website](https://ai4kids.tertiarycourses.com.sg) · [iOS counterpart](https://github.com/alfredang/ai4kidsapp) · [Report Bug](https://github.com/alfredang/ai4kids_android/issues)
 
 </div>
 
@@ -23,6 +28,14 @@
 | <img src="docs/screenshots/home.png" width="200" /> | <img src="docs/screenshots/story_builder.png" width="200" /> | <img src="docs/screenshots/code_puzzles.png" width="200" /> | <img src="docs/screenshots/brain_arcade.png" width="200" /> |
 
 </div>
+
+## Download
+
+AI4Kids is live on Google Play:
+
+**[play.google.com/store/apps/details?id=sg.com.tertiarycourses.ai4kids](https://play.google.com/store/apps/details?id=sg.com.tertiarycourses.ai4kids)**
+
+Source code: **[github.com/alfredang/ai4kids_android](https://github.com/alfredang/ai4kids_android)**
 
 ## About
 
