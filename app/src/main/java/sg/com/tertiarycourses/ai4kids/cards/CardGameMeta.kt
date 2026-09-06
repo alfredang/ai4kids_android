@@ -15,7 +15,7 @@ enum class CardMode(val slug: String, val label: String) {
 }
 
 /**
- * Catalogue metadata for the six "Brain Arcade" card games — a Kotlin port of
+ * Catalogue metadata for the ten "Brain Arcade" card games — a Kotlin port of
  * the web `meta.ts`. Drives the hub list and the per-game lobby copy. No game
  * logic lives here (the backend is authoritative); this only labels things.
  */
