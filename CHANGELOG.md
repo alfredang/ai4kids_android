@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3] — 2026-11-03 · versionCode 6
+
+### Changed
+- Sunny bookworm launcher icon and original colourful activity artwork, matching the AI Kids website.
+- Sky-blue and lavender screens, playful borders and larger Fraunces / Nunito typography.
+- Parent sign-in and owned child-profile selection for online games. Offline activities stay available without an account.
+- AI art, Talking Buddy and writing your own story open the working family website after a grown-up check; parent sign-in is required there.
+- Store bundle uses package sg.com.tertiarycourses.ai4kidsapp for the sales@tertiarycourses.com.sg developer account.
+- Release bundles contain no embedded AI provider keys.
+
+### Play submission
+- Signed release bundle validated with bundletool and jarsigner; release build passed on 3 November 2026.
+- Production submission pending sales-account authentication and final device/store checks. Not yet uploaded to Google Play.
+
+
 All notable changes to the AI4Kids Android app. Format follows
 [Keep a Changelog](https://keepachangelog.com); the newest entry's bullets are
 the source of truth for the Play Store release notes.

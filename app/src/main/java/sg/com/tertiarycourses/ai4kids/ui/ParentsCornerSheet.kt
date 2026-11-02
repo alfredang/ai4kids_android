@@ -18,7 +18,7 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnyIcon as Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,8 +65,12 @@ fun ParentsCornerSheet(onDismiss: () -> Unit) {
 
             SectionTitle("Brain Arcade (online play)")
             InfoRow(Icons.Filled.Groups, "Optional multiplayer card games — play with friends using a room code")
-            InfoRow(Icons.Filled.Lock, "Online multiplayer requires signing in with an ai4kids kid account; solo play never does")
+            InfoRow(Icons.Filled.Lock, "A parent signs in and chooses their own child's profile for online multiplayer; solo play never needs an account")
             InfoRow(Icons.Filled.Wifi, "Online games connect to ai4kids only to sync play between friends")
+
+            SectionTitle("Create with AI together")
+            InfoRow(Icons.Filled.Lock, "AI art, Talking Buddy and writing your own story open the family website after a grown-up check")
+            InfoRow(Icons.Filled.Wifi, "The website needs parent sign-in and internet access; its privacy policy applies")
 
             SectionTitle("Progress")
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

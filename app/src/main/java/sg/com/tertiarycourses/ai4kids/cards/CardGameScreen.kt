@@ -169,7 +169,7 @@ fun CardGameScreen(game: CardGameMeta, loggedIn: Boolean, onClose: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 CloseButton(onClick = { if (code != null) leave() else onClose() })
                 Spacer(Modifier.weight(1f))
-                Text("${game.emoji} ${game.title}", color = Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text(game.title, color = Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.widthIn(min = 48.dp))
             }
@@ -243,7 +243,7 @@ private fun Menu(
         game.how.forEachIndexed { i, line ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("${i + 1}.", color = game.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text(line, color = Theme.Ink.copy(alpha = 0.7f), fontSize = 14.sp)
+                Text(line, color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp)
             }
         }
     }
@@ -277,7 +277,7 @@ private fun Menu(
                     )
                 }
             }
-            Text("Got a code?", color = Theme.Ink.copy(alpha = 0.7f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("Got a code?", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = joinCode,
@@ -380,7 +380,7 @@ private fun Lobby(
                 onClick = onStart,
             )
         } else {
-            Text("Waiting for the host to start… 🕒", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp)
+            Text("Waiting for the host to start…", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 15.sp)
         }
         TextButton(onClick = onLeave) { Text("Leave", color = Theme.Ink.copy(alpha = 0.5f)) }
     }
@@ -428,7 +428,7 @@ private fun Results(state: CardState, onAgain: () -> Unit) {
             Text("+$earned ${if (earned == 1) "star" else "stars"}", color = Theme.Orange, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
         if (solo && state.bestMs != null) {
-            Text("🏆 Best: ${fmtTime(state.bestMs)}", color = Theme.Orange, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("Best: ${fmtTime(state.bestMs)}", color = Theme.Orange, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
 
         if (!solo && !coop) {
@@ -436,7 +436,7 @@ private fun Results(state: CardState, onAgain: () -> Unit) {
                 val medal = listOf("🥇", "🥈", "🥉").getOrElse(i) { "🎖️" }
                 Text(
                     "$medal ${nameById[id] ?: "Player"}${if (id == state.you) " (you)" else ""}",
-                    color = if (i == 0) Theme.Orange else Theme.Ink.copy(alpha = 0.7f),
+                    color = if (i == 0) Theme.Orange else Theme.Ink.copy(alpha = 0.85f),
                     fontSize = 16.sp, fontWeight = FontWeight.Bold,
                 )
             }
@@ -467,7 +467,7 @@ private fun Board(state: CardState, busy: Boolean, onMove: (JSONObject) -> Unit)
             ) {
                 Text(
                     (if (game.yourTurn) "🟢 " else "🕒 ") + turnName,
-                    color = if (game.yourTurn) Theme.Green else Theme.Ink.copy(alpha = 0.6f),
+                    color = if (game.yourTurn) Theme.Green else Theme.Ink.copy(alpha = 0.85f),
                     fontWeight = FontWeight.Bold,
                 )
             }

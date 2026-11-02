@@ -32,6 +32,7 @@ object CardApi {
     private const val PREFS = "ai4kids.cards"
     private const val SECURE_PREFS = "ai4kids.cards.secure"
     private const val KEY_BASE = "baseUrl"
+    private const val KEY_PLAY_COOKIE = "parentPlayProfile"
     private const val KEY_SESSION_COOKIE = "sessionCookie" // "name\tvalue"
     private const val DEFAULT_BASE = "https://ai4kids.tertiarycourses.com.sg"
 
@@ -47,6 +48,7 @@ object CardApi {
                     cookieStore.removeAll { it.name == c.name && it.domain == c.domain }
                     cookieStore.add(c)
                     if (c.name.contains("session-token")) persistSessionCookie(c)
+                    if (c.name == "ai_kids_play_profile") securePrefs.edit().putString(KEY_PLAY_COOKIE, c.toString()).apply()
                 }
             }
         }
@@ -111,13 +113,14 @@ object CardApi {
 
     /* ----------------------------- Session ----------------------------- */
 
+    fun hasParentLogin(): Boolean = synchronized(cookieStore) { cookieStore.any { it.name.contains("session-token") && it.value.isNotEmpty() } }
     fun isLoggedIn(): Boolean = synchronized(cookieStore) {
-        cookieStore.any { it.name.contains("session-token") && it.value.isNotEmpty() }
+        hasParentLogin() && cookieStore.any { it.name == "ai_kids_play_profile" && it.expiresAt > System.currentTimeMillis() }
     }
 
     fun logout() {
         synchronized(cookieStore) { cookieStore.clear() }
-        securePrefs.edit().remove(KEY_SESSION_COOKIE).apply()
+        securePrefs.edit().remove(KEY_SESSION_COOKIE).remove(KEY_PLAY_COOKIE).apply()
     }
 
     /* ---- Local solo best times (offline play, no sign-in needed) ---- */
@@ -158,6 +161,9 @@ object CardApi {
             .apply { if (url.isHttps) secure() }
             .build()
         synchronized(cookieStore) { cookieStore.add(cookie) }
+        securePrefs.getString(KEY_PLAY_COOKIE, null)?.let { raw ->
+            Cookie.parse(url, raw)?.takeIf { it.expiresAt > System.currentTimeMillis() }?.let { profile -> synchronized(cookieStore) { cookieStore.add(profile) } }
+        }
     }
 
     /* ----------------------------- Auth ----------------------------- */
@@ -180,6 +186,7 @@ object CardApi {
             val req = Request.Builder()
                 .url("$baseUrl/api/auth/callback/credentials")
                 .header("Accept", "application/json")
+                .header("X-Auth-Return-Redirect", "1")
                 .post(form)
                 .build()
             client.newCall(req).execute().use { resp ->
@@ -189,15 +196,32 @@ object CardApi {
                 if (url.contains("error", ignoreCase = true)) {
                     return "Oops! That username or password didn't work. Try again 🙂"
                 }
-                if (!isLoggedIn()) {
+                if (!hasParentLogin()) {
                     return "Login failed. Please try again."
                 }
+                fetchChildProfiles() // server verifies the live parent role
                 null
             }
         } catch (e: Exception) {
             "Couldn't connect: ${e.message ?: "network error"}"
         }
     }
+
+    data class ChildProfile(val id:Int,val name:String)
+
+    fun fetchChildProfiles(): List<ChildProfile> {
+        val req=Request.Builder().url("$baseUrl/api/parent/play").get().build()
+        client.newCall(req).execute().use { resp ->
+            if(!resp.isSuccessful) throw ApiException("A parent must sign in to unlock online games.")
+            val list=JSONObject(resp.body?.string().orEmpty()).getJSONArray("children")
+            return (0 until list.length()).map { index -> val child=list.getJSONObject(index); ChildProfile(child.getInt("id"),child.getString("name")) }
+        }
+    }
+    fun selectChild(childId:Int):String? = try {
+        val req=Request.Builder().url("$baseUrl/api/parent/play")
+            .post(JSONObject().put("childId",childId).toString().toRequestBody(JSON)).build()
+        client.newCall(req).execute().use { resp -> if(resp.isSuccessful) null else "We couldn’t unlock that profile. Please choose your child again." }
+    } catch(e:Exception) { "Please check your connection and try again." }
 
     private fun fetchCsrfToken(): String? {
         val req = Request.Builder().url("$baseUrl/api/auth/csrf").get().build()

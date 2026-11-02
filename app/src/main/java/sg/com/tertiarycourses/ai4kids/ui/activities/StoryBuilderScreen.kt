@@ -1,5 +1,10 @@
 package sg.com.tertiarycourses.ai4kids.ui.activities
 
+import sg.com.tertiarycourses.ai4kids.ui.components.ParentOnlineActivity
+import sg.com.tertiarycourses.ai4kids.ui.components.FamilyOnlineActivity
+
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnySticker
+
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -156,7 +161,7 @@ private fun StoryStartScreen(onPick: (StoryMode) -> Unit, onClose: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 StarBadge(count = progress.stars(Activity.STORY))
             }
-            Text("📖", fontSize = 64.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+            SunnySticker("📖", 80, Modifier.align(Alignment.CenterHorizontally))
             Text(
                 "How do you want to make your story?",
                 color = Theme.Ink,
@@ -207,13 +212,13 @@ private fun ModeCard(
                 .clip(RoundedCornerShape(20.dp))
                 .background(color.copy(alpha = 0.15f)),
         ) {
-            Text(emoji, fontSize = 32.sp)
+            SunnySticker(emoji, 44)
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
             Text(title, color = Theme.Ink, fontSize = 20.sp, fontWeight = FontWeight.Black)
-            Text(blurb, color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp)
+            Text(blurb, color = Theme.Ink.copy(alpha = 0.85f), fontSize = 15.sp)
         }
-        Text("▶", color = color, fontSize = 22.sp, fontWeight = FontWeight.Black)
+        SunnySticker("▶", 28)
     }
 }
 
@@ -568,29 +573,7 @@ private fun WriteMode(onBack: () -> Unit) {
  *  for a grown-up rather than faking a story. Build mode stays fully playable. */
 @Composable
 private fun WriteNotConfigured(onBack: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Theme.Background)
-            .padding(28.dp),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.align(Alignment.Center).fillMaxWidth().kidCard().padding(28.dp),
-        ) {
-            Text("✍️", fontSize = 72.sp)
-            Text(
-                "Writing your own needs a grown-up",
-                color = Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center,
-            )
-            Text(
-                "Ask a grown-up to add an AI key — or go build a story instead!",
-                color = Theme.Ink.copy(alpha = 0.6f), fontSize = 17.sp, textAlign = TextAlign.Center,
-            )
-            KidButton(title = "Okay", color = Theme.Orange, onClick = onBack)
-        }
-    }
+    ParentOnlineActivity(FamilyOnlineActivity.STORY, onBack)
 }
 
 /**
@@ -839,7 +822,7 @@ private fun WritingStage(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
         modifier = modifier.fillMaxWidth(),
     ) {
-        Text("✨📖✨", fontSize = 56.sp)
+        SunnySticker("✨📖✨", 80)
         Text(
             "Writing your story…",
             color = Theme.Ink,
@@ -1043,7 +1026,7 @@ private fun ReaderStage(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "Page ${pageIndex + 1} of $pageCount",
-                    color = Theme.Ink.copy(alpha = 0.6f),
+                    color = Theme.Ink.copy(alpha = 0.85f),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                 )

@@ -5,6 +5,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import sg.com.tertiarycourses.ai4kids.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,7 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnyIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -178,13 +181,13 @@ private fun ArcadeCard(onOpen: () -> Unit) {
                     .background(Theme.Green.copy(alpha = 0.15f))
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
-                Text("Online", color = Theme.Green, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("Online", color = Theme.Green, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             }
         }
-        Text("Brain Arcade", color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
-        Text("Card games with friends", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 17.sp, fontWeight = FontWeight.Medium)
+        Text("Brain Arcade", color = Theme.Purple, fontSize = 28.sp, fontWeight = FontWeight.Black, fontFamily = Theme.DisplayFont)
+        Text("Card games with friends", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 19.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.weight(1f))
-        Text("🃏 10 games", color = Theme.Ink.copy(alpha = 0.7f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("10 games", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -197,21 +200,22 @@ private fun Header(onParents: () -> Unit) {
             .fillMaxWidth()
             .padding(bottom = 6.dp),
     ) {
-        Column {
+        Image(painterResource(R.drawable.kid_sunny_logo), contentDescription = null, modifier=Modifier.size(64.dp))
+        Column(modifier=Modifier.weight(1f)) {
             Text(
-                "AI4Kids",
+                "AI Kids",
                 color = Theme.Purple,
-                fontSize = 48.sp,
+                fontSize = 34.sp,
+                fontFamily = Theme.DisplayFont,
                 fontWeight = FontWeight.Black,
             )
             Text(
-                "Play. Learn. Create.",
-                color = Theme.Ink.copy(alpha = 0.7f),
-                fontSize = 20.sp,
+                "Little minds. Big ideas.",
+                color = Theme.Ink.copy(alpha = 0.85f),
+                fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        Spacer(Modifier.weight(1f))
         StarBadge(count = progress.totalStars)
         Spacer(Modifier.size(12.dp))
         Box(
@@ -242,42 +246,21 @@ private fun ActivityCard(activity: Activity, onClick: () -> Unit) {
         label = "cardScale",
     )
 
-    Column(
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier
-            .scale(scale)
-            .fillMaxWidth()
-            .heightIn(min = 230.dp)
-            .kidCard()
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(24.dp),
+    Row(
+        verticalAlignment=Alignment.CenterVertically,
+        horizontalArrangement=Arrangement.spacedBy(18.dp),
+        modifier=Modifier.scale(scale).fillMaxWidth().heightIn(min=175.dp).kidCard()
+            .clickable(interactionSource=interaction,indication=null,onClick=onClick).padding(20.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(88.dp)
-                    .clip(CircleShape)
-                    .background(activity.color),
-            ) {
-                Icon(activity.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(44.dp))
+        Image(painterResource(when(activity.id) {"story"->R.drawable.friend_story;"art"->R.drawable.friend_art;"code"->R.drawable.friend_maths;"escape","buddy"->R.drawable.friend_science;else->R.drawable.kid_wand}),contentDescription=null,modifier=Modifier.size(104.dp))
+        Column(verticalArrangement=Arrangement.spacedBy(7.dp),modifier=Modifier.weight(1f)) {
+            Text(activity.ageBand,color=activity.color,fontSize=17.sp,fontWeight=FontWeight.Bold)
+            Text(activity.title,color=activity.color,fontSize=27.sp,fontWeight=FontWeight.Black,fontFamily=Theme.DisplayFont)
+            Text(activity.subtitle,color=Theme.Ink,fontSize=18.sp,fontWeight=FontWeight.Medium)
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                Icon(Icons.Filled.Star,contentDescription=null,modifier=Modifier.size(25.dp))
+                Text("$stars stars",color=Theme.Ink,fontSize=16.sp,fontWeight=FontWeight.Bold)
             }
-            Spacer(Modifier.weight(1f))
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(activity.color.copy(alpha = 0.15f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            ) {
-                Text(activity.ageBand, color = activity.color, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-        Text(activity.title, color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
-        Text(activity.subtitle, color = Theme.Ink.copy(alpha = 0.6f), fontSize = 17.sp, fontWeight = FontWeight.Medium)
-        Spacer(Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(Icons.Filled.Star, contentDescription = null, tint = Theme.Yellow, modifier = Modifier.size(18.dp))
-            Text("$stars stars", color = Theme.Ink.copy(alpha = 0.7f), fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

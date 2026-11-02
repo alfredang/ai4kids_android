@@ -26,5 +26,10 @@ keystore.properties
 # Distribution archives (rebuildable — never pushed to GitHub)
 *.zip
 
+# Private release and review configuration
+.env
+.env.*
+!.env.example
+
 # Source material the project was derived from — not ours to republish.
 **/reference/

@@ -1,5 +1,10 @@
 package sg.com.tertiarycourses.ai4kids.ui.activities.buddy
 
+import sg.com.tertiarycourses.ai4kids.ui.components.ParentOnlineActivity
+import sg.com.tertiarycourses.ai4kids.ui.components.FamilyOnlineActivity
+
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnySticker
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -32,7 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Icon
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnyIcon as Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -212,10 +217,10 @@ fun TalkingBuddyScreen(onClose: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth().kidCard().padding(vertical = 16.dp, horizontal = 20.dp),
             ) {
-                Text("🤖 Talking Buddy", color = Theme.Ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Talking Buddy", color = Theme.Ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                 BuddyFace(mouthOpen = mouth, blink = blink, modifier = Modifier.size(160.dp))
                 if (status.isNotEmpty()) {
-                    Text(status, color = Theme.Ink.copy(alpha = 0.6f), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(status, color = Theme.Ink.copy(alpha = 0.85f), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
 
@@ -284,7 +289,7 @@ private fun ChatBubble(turn: Turn, accent: Color) {
         horizontalArrangement = if (turn.fromUser) Arrangement.End else Arrangement.Start,
     ) {
         if (!turn.fromUser) {
-            Text("🤖", fontSize = 22.sp, modifier = Modifier.padding(end = 6.dp, top = 4.dp))
+            SunnySticker("🤖", 28, Modifier.padding(end = 6.dp, top = 4.dp))
         }
         Box(
             modifier = Modifier
@@ -310,22 +315,5 @@ private fun Modifier.widthInFraction(): Modifier = this.fillMaxWidth(0.85f)
 
 @Composable
 private fun NotConfigured(onClose: () -> Unit, accent: Color) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Theme.Background).systemBarsPadding().padding(18.dp),
-    ) {
-        CloseButton(onClick = onClose)
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.align(Alignment.Center).fillMaxWidth().kidCard().padding(28.dp),
-        ) {
-            Text("🤖", fontSize = 72.sp)
-            Text("Talking Buddy needs a grown-up", color = Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
-            Text(
-                "Ask a grown-up to add an AI key so your buddy can chat!",
-                color = Theme.Ink.copy(alpha = 0.6f), fontSize = 17.sp, textAlign = TextAlign.Center,
-            )
-            KidButton(title = "Okay", color = accent, onClick = onClose)
-        }
-    }
+    ParentOnlineActivity(FamilyOnlineActivity.BUDDY, onClose)
 }

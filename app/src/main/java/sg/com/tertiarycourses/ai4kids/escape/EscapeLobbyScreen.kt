@@ -1,5 +1,7 @@
 package sg.com.tertiarycourses.ai4kids.escape
 
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnySticker
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -140,7 +142,7 @@ fun EscapeLobbyScreen(onClose: () -> Unit, onPlay: (code: String?, host: Boolean
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 CloseButton(onClick = onClose)
                 Spacer(Modifier.weight(1f))
-                Text("🚪 Escape Room", color = Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text("Escape Room", color = Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.weight(1f))
                 // Sign in / out for the online co-op session (shared with Brain Arcade).
                 if (loggedIn) {
@@ -232,9 +234,9 @@ private fun Hero(title: String, subtitle: String) {
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.fillMaxWidth().kidCard().padding(24.dp),
     ) {
-        Text("🤖", fontSize = 52.sp)
+        SunnySticker("🤖", 80)
         Text(title, color = Theme.Ink, fontSize = 24.sp, fontWeight = FontWeight.Black)
-        Text(subtitle, color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp, textAlign = TextAlign.Center)
+        Text(subtitle, color = Theme.Ink.copy(alpha = 0.85f), fontSize = 15.sp, textAlign = TextAlign.Center)
     }
 }
 
@@ -310,7 +312,7 @@ private fun LobbyRoom(code: String, host: Boolean, initial: EscapeState, onLeave
                 val started = state.playing || state.escaped
                 Text(
                     if (started) "The host has started — jump in!" else "Waiting for the host to start…",
-                    color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp, textAlign = TextAlign.Center,
+                    color = Theme.Ink.copy(alpha = 0.85f), fontSize = 15.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 KidButton(

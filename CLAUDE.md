@@ -59,6 +59,14 @@ All Gemini/Cloudflare usage stays fully offline when the keys are blank.
 
 ## Privacy posture
 
+Release 1.3 carries no AI provider credentials. In the standard keyless build,
+Talking Buddy, Art Studio and Story Builder's Write mode use `ParentOnlineActivity`:
+a fresh grown-up gate opens the corresponding fixed family-website URL in the
+browser. The website then requires parent sign-in and owned-child selection.
+No credentials or session tokens are passed in that URL. The native Gemini/image
+clients described above remain optional development paths. Native online card
+games and co-op rooms now use a parent login and an encrypted owned-profile cookie.
+
 - **No ads. No third-party analytics or tracking SDKs.**
 - **Google Play Families Policy:** the app targets children (Designed for
   Families), so a **parental gate** (`cards/ParentalGate.kt`) guards (1) first

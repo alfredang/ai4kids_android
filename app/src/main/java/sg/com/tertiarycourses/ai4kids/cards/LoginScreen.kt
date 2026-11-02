@@ -1,5 +1,9 @@
 package sg.com.tertiarycourses.ai4kids.cards
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.size
+import sg.com.tertiarycourses.ai4kids.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +52,7 @@ fun LoginScreen(onClose: () -> Unit, onLoggedIn: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var profiles by remember { mutableStateOf<List<CardApi.ChildProfile>?>(null) }
     val scope = rememberCoroutineScope()
 
     fun submit() {
@@ -57,10 +62,27 @@ fun LoginScreen(onClose: () -> Unit, onLoggedIn: () -> Unit) {
         scope.launch {
             val err = withContext(Dispatchers.IO) { CardApi.login(identifier, password) }
             busy = false
-            if (err == null) onLoggedIn() else error = err
+            if (err == null) {
+                val children=withContext(Dispatchers.IO) { runCatching { CardApi.fetchChildProfiles() }.getOrDefault(emptyList()) }
+                if(children.isEmpty()) error="Add a child profile on the AI Kids website first." else profiles=children
+            } else error = err
         }
     }
 
+    if(profiles != null) {
+        Column(modifier=Modifier.fillMaxSize().background(Theme.Background).verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.spacedBy(18.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+            CloseButton(onClick=onClose)
+            Image(painterResource(R.drawable.kid_sunny_logo),null,modifier=Modifier.size(100.dp))
+            Text("Who’s playing today?",fontSize=28.sp,fontWeight=FontWeight.Bold,color=Theme.Purple,fontFamily=Theme.DisplayFont)
+            Text("Choose your child and explore together.",fontSize=19.sp,color=Theme.Ink)
+            profiles!!.forEach { child -> KidButton(title="Play with ${child.name}",enabled=!busy,modifier=Modifier.fillMaxWidth(),onClick={
+                busy=true; scope.launch { val err=withContext(Dispatchers.IO){CardApi.selectChild(child.id)};busy=false;if(err==null) onLoggedIn() else error=err }
+            }) }
+            error?.let { Text(it,color=Theme.Red) }
+            KidButton(title="Use another parent account",color=Theme.Teal,onClick={CardApi.logout();profiles=null})
+        }
+        return
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -88,12 +110,12 @@ fun LoginScreen(onClose: () -> Unit, onLoggedIn: () -> Unit) {
                     .kidCard()
                     .padding(28.dp),
             ) {
-                Text("🤖", fontSize = 56.sp)
-                Text("Sign in", color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
+                Image(painterResource(R.drawable.kid_sunny_logo),null,modifier=Modifier.size(80.dp))
+                Text("Parent sign-in", color = Theme.Ink, fontSize = 26.sp, fontWeight = FontWeight.Black)
                 Text(
-                    "Ask your parent or teacher to sign in for you to play online with friends.",
-                    color = Theme.Ink.copy(alpha = 0.6f),
-                    fontSize = 15.sp,
+                    "A parent signs in and chooses a child. Offline games stay available without a login.",
+                    color = Theme.Ink.copy(alpha = 0.85f),
+                    fontSize = 18.sp,
                     textAlign = TextAlign.Center,
                 )
 
@@ -101,9 +123,9 @@ fun LoginScreen(onClose: () -> Unit, onLoggedIn: () -> Unit) {
                     value = identifier,
                     onValueChange = { identifier = it },
                     singleLine = true,
-                    label = { Text("Username") },
-                    placeholder = { Text("e.g. supernova") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    label = { Text("Parent email") },
+                    placeholder = { Text("parent@example.com") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(

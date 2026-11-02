@@ -1,5 +1,7 @@
 package sg.com.tertiarycourses.ai4kids.ui.activities.phonics
 
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnySticker
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,7 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnyIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -148,7 +150,7 @@ private fun StageNode(stage: PhonicsStage, number: Int, stars: Int, unlocked: Bo
                 .clip(CircleShape)
                 .background(if (unlocked) stage.color else Theme.Ink.copy(alpha = 0.15f)),
         ) {
-            if (unlocked) Text(stage.emoji, fontSize = 32.sp)
+            if (unlocked) SunnySticker(stage.emoji, 44)
             else Icon(Icons.Filled.Lock, contentDescription = "Locked", tint = Color.White, modifier = Modifier.size(28.dp))
         }
         Spacer(Modifier.size(16.dp))
@@ -224,7 +226,7 @@ private fun StageHost(index: Int, store: PhonicsStore, audio: PhonicsAudio, onBa
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 CloseButton(onClick = onBack)
                 Spacer(Modifier.weight(1f))
-                Text("${stage.emoji} ${stage.title}", color = Theme.Ink, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                Text(stage.title, color = Theme.Ink, fontSize = 20.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.weight(1f))
                 StarBadge(count = store.stars(stage.id))
             }
@@ -302,7 +304,7 @@ private fun StageComplete(stage: PhonicsStage, stars: Int, onAgain: () -> Unit, 
                 .verticalScroll(rememberScrollState())
                 .padding(28.dp),
         ) {
-            Text("🎉", fontSize = 64.sp)
+            SunnySticker("🎉", 88)
             Text("${stage.title} cleared!", color = Theme.Ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
             Row {
                 repeat(3) { s ->

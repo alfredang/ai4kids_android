@@ -192,7 +192,7 @@ fun JigsawBoard(image: ImageBitmap, onSolved: (Int) -> Unit) {
                     .background(Theme.Green.copy(alpha = 0.18f))
                     .padding(16.dp),
             ) {
-                Text("You solved it! +${diff.stars} ⭐", color = Theme.Green, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text("You solved it! +${diff.stars} stars", color = Theme.Green, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                 Chip("Play again 🔁", selected = false, color = Theme.Blue) { newGame(diff) }
             }
         }
@@ -222,7 +222,7 @@ private fun Chip(label: String, selected: Boolean, color: Color, onClick: () -> 
     val shape = RoundedCornerShape(16.dp)
     Text(
         label,
-        color = if (selected) Color.White else Theme.Ink.copy(alpha = 0.6f),
+        color = if (selected) Color.White else Theme.Ink.copy(alpha = 0.85f),
         fontSize = 14.sp,
         fontWeight = FontWeight.ExtraBold,
         modifier = Modifier

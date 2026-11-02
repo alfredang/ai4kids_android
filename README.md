@@ -19,7 +19,18 @@
 
 </div>
 
+Version 1.3 brings the website’s sunny bookworm, original illustrated controls,
+playful activity artwork, sky-blue and lavender colours, and bundled Fraunces /
+Nunito fonts. Online games now require a parent to sign in and choose their own
+child’s profile. Offline activities remain available without an account.
+
+The new sales-account release uses package `sg.com.tertiarycourses.ai4kidsapp`.
+Its production submission is pending; the download links below currently refer
+to the existing public app (`sg.com.tertiarycourses.ai4kids`).
+
 ## Screenshots
+
+![Sunny AI4Kids home screen](screenshot.png)
 
 <div align="center">
 
@@ -45,16 +56,17 @@ kid-first learning app built around bright activity cards on a single home scree
 Kids earn ⭐️ stars for completing rounds, the home header keeps a running total, and a
 **Parents' Corner** explains the privacy stance and can reset progress.
 
-The core learning activities are **offline-first** — no login, progress stored locally on
-the device. **Phonics Quest** (spoken "Buddy" hints) and **Story Builder** (freshly-written
-tales) can optionally call Google **Gemini** when an API key is set; both stay fully playable
-offline without it. Two more activities are **AI-powered** — **Talking Buddy** (chat by voice
-or text, via Gemini) and **Art Studio** (an AI-painted picture — Cloudflare Flux, NVIDIA
-fallback — you turn into a jigsaw) — active when a key is set, and showing a friendly "ask a
-grown-up" screen when it isn't. The **Escape Room** is a top-down puzzle adventure (built with
-LibGDX) you can play solo offline or **co-op** with friends over a room code. The **Brain
-Arcade** adds **online multiplayer card games**. Co-op Escape and the Brain Arcade need a
-sign-in and an internet connection; everything else works fully offline.
+Phonics, building a branching story, code puzzles, solo escape rooms and solo card games
+work offline, with progress stored on-device. Online multiplayer requires a parent to
+sign in and choose their own child’s profile.
+
+The standard release carries no AI provider credentials. **Talking Buddy**, **AI Art Studio**
+and **Write your own story** offer a grown-up check followed by a fixed link to the
+corresponding activity on the family website. The browser requires parent sign-in and
+child selection; the website’s DeepSeek text and image-provider connections stay on the
+server. No password or session token is added to the URL. The website’s privacy policy
+applies to those browser activities. Keyed native AI clients remain available for local
+development builds.
 
 ### Activities
 
@@ -64,8 +76,8 @@ sign-in and an internet connection; everything else works fully offline.
 | 📖 **Story Builder** | 7–9 | **Build a story** from a hero/place/item/mood into a twice-branching tale, or **Write your own** — type an idea for an AI-illustrated 3-scene story | Offline (+ optional AI) |
 | 🧩 **Code Puzzles** | 7–12 | Sequence arrow steps to walk a robot 🤖 to the star ⭐️ (algorithmic thinking) | Offline |
 | 🚪 **Escape Room** | 7–12 | Walk a top-down room, solve a chain of mini-puzzles and escape; five themed rooms, solo or co-op | Offline (solo) · Online (co-op) |
-| 💬 **Talking Buddy** | 5–10 | Chat with a friendly AI pal by voice or text; speech-in and spoken replies happen on-device | Online AI (key required) |
-| 🎨 **Art Studio** | 5–12 | Describe a picture, let AI paint it, then turn the picture into a jigsaw | Online AI (key required) |
+| 💬 **Talking Buddy** | 5–10 | Opens the family website after a grown-up check to chat with a friendly AI pal | Browser · Parent sign-in |
+| 🎨 **Art Studio** | 5–12 | Opens the family website after a grown-up check to make a picture and try a jigsaw | Browser · Parent sign-in |
 | 🧠 **Brain Arcade** | All | Ten **card games** — play solo, co-op, or versus friends | Online |
 
 ### Phonics Quest — the seven worlds

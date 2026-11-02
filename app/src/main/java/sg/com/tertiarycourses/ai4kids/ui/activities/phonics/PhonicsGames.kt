@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material3.Icon
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnyIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -104,7 +104,7 @@ private fun RoundFeedback(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Great job! 🎉", color = Theme.Green, fontSize = 18.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+            Text("Great job!", color = Theme.Green, fontSize = 18.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
             KidButton(title = if (isLast) "Finish ▶" else "Next ▶", color = color, onClick = onNext)
         }
         showWrong -> Text(
@@ -249,7 +249,7 @@ fun PopPhonemeGame(
         }
         Text(
             "Hear each sound, then pick the one it starts with!",
-            color = Theme.Ink.copy(alpha = 0.7f),
+            color = Theme.Ink.copy(alpha = 0.85f),
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
@@ -411,7 +411,7 @@ fun BuildWordGame(
     ) {
         Text(
             if (pending != null) "Tap it again to place it! 👆" else "Tap a letter to hear it",
-            color = Theme.Ink.copy(alpha = 0.7f),
+            color = Theme.Ink.copy(alpha = 0.85f),
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
@@ -539,7 +539,7 @@ fun RhymeGame(
         verticalArrangement = Arrangement.spacedBy(18.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text("Which word rhymes?", color = Theme.Ink.copy(alpha = 0.7f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Text("Which word rhymes?", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -633,7 +633,7 @@ fun ListenFindGame(
         verticalArrangement = Arrangement.spacedBy(18.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text("Listen, then tap the word you hear!", color = Theme.Ink.copy(alpha = 0.7f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        Text("Listen, then tap the word you hear!", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         // Big "listen" card (no word shown — they must listen).
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -750,7 +750,7 @@ fun BlendGame(
     ) {
         Text(
             "Blend the sounds, then tap the picture!",
-            color = Theme.Ink.copy(alpha = 0.7f),
+            color = Theme.Ink.copy(alpha = 0.85f),
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
@@ -868,7 +868,7 @@ fun DigraphGame(
     ) {
         Text(
             "Which two letters make this sound?",
-            color = Theme.Ink.copy(alpha = 0.7f),
+            color = Theme.Ink.copy(alpha = 0.85f),
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,

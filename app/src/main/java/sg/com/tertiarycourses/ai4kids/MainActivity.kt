@@ -40,13 +40,11 @@ class MainActivity : ComponentActivity() {
                         ParentalGate(
                             headerTitle = "Welcome to AI4Kids",
                             cardTitle = "Parental consent",
-                            message = "AI4Kids is a learning app for ages 4–16. The activities " +
-                                "play fully offline with no ads and no personal data collected. " +
-                                "The optional online \"Brain Arcade\" lets children play card games " +
-                                "with friends using a username-only kid account — no name, email, " +
-                                "phone number, or location is ever collected.\n\n" +
-                                "A parent or guardian: please confirm you consent to your child " +
-                                "using AI4Kids by solving the problem below.",
+                            message = "AI4Kids offers offline learning games with no ads or tracking. " +
+                                "Optional online card games and co-op rooms need a parent sign-in " +
+                                "and a linked child profile. Online sign-in sends the parent email " +
+                                "and gameplay to our secure server.\n\n" +
+                                "A parent or guardian: please confirm before your child plays.",
                             confirmLabel = "I consent — let my child play",
                             onConsent = { consent.grant() },
                         )

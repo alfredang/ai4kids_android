@@ -1,5 +1,10 @@
 package sg.com.tertiarycourses.ai4kids.ui.activities.art
 
+import sg.com.tertiarycourses.ai4kids.ui.components.ParentOnlineActivity
+import sg.com.tertiarycourses.ai4kids.ui.components.FamilyOnlineActivity
+
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnySticker
+
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -116,10 +121,10 @@ fun ArtStudioScreen(onClose: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth().kidCard().padding(20.dp),
             ) {
-                Text("🎨 AI Art Studio", color = Theme.Ink, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                Text("AI Art Studio", color = Theme.Ink, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                 Text(
                     "Describe a picture and the AI will paint it for you!",
-                    color = Theme.Ink.copy(alpha = 0.6f), fontSize = 16.sp,
+                    color = Theme.Ink.copy(alpha = 0.85f), fontSize = 16.sp,
                 )
                 OutlinedTextField(
                     value = prompt,
@@ -134,7 +139,7 @@ fun ArtStudioScreen(onClose: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 )
                 IdeaChips(ArtEngine.IDEAS) { prompt = it }
-                Text("Pick a style", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Pick a style", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                 StyleChips(selected = style, accent = accent) { style = it }
                 KidButton(
                     title = if (loading) "Painting… 🖌️" else "Make my picture! 🪄",
@@ -209,7 +214,7 @@ private fun StyleChips(selected: String, accent: Color, onPick: (String) -> Unit
                     val shape = RoundedCornerShape(16.dp)
                     Text(
                         "${chip.emoji} ${chip.label}",
-                        color = if (on) Color.White else Theme.Ink.copy(alpha = 0.6f),
+                        color = if (on) Color.White else Theme.Ink.copy(alpha = 0.85f),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold,
                         modifier = Modifier
@@ -232,22 +237,5 @@ private fun StyleChips(selected: String, accent: Color, onPick: (String) -> Unit
 
 @Composable
 private fun NotConfigured(onClose: () -> Unit, accent: Color) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Theme.Background).systemBarsPadding().padding(18.dp),
-    ) {
-        CloseButton(onClick = onClose)
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.align(Alignment.Center).fillMaxWidth().kidCard().padding(28.dp),
-        ) {
-            Text("🎨", fontSize = 72.sp)
-            Text("Art Studio needs a grown-up", color = Theme.Ink, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
-            Text(
-                "Ask a grown-up to add an AI key so you can paint with AI!",
-                color = Theme.Ink.copy(alpha = 0.6f), fontSize = 17.sp, textAlign = TextAlign.Center,
-            )
-            KidButton(title = "Okay", color = accent, onClick = onClose)
-        }
-    }
+    ParentOnlineActivity(FamilyOnlineActivity.ART, onClose)
 }

@@ -1,17 +1,1 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Legacy (API 24-25) round launcher icon: purple disc with a robot face. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path android:fillColor="#734CEB" android:pathData="M54,54m-54,0a54,54 0,1 1,108 0a54,54 0,1 1,-108 0" />
-    <path android:fillColor="#FFD129" android:pathData="M52,28h4v10h-4z" />
-    <path android:fillColor="#FFD129" android:pathData="M54,24m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
-    <path android:fillColor="#FFFFFF"
-        android:pathData="M40,38h28a8,8 0,0 1,8 8v22a8,8 0,0 1,-8 8h-28a8,8 0,0 1,-8 -8v-22a8,8 0,0 1,8 -8z" />
-    <path android:fillColor="#734CEB" android:pathData="M46,52m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
-    <path android:fillColor="#734CEB" android:pathData="M62,52m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
-    <path android:strokeColor="#FF595F" android:strokeWidth="3" android:fillColor="#00000000"
-        android:strokeLineCap="round" android:pathData="M46,64 Q54,70 62,64" />
-</vector>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android" android:src="@drawable/sunny_app_icon" android:gravity="fill"/>

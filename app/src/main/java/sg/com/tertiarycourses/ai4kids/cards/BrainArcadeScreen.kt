@@ -1,5 +1,7 @@
 package sg.com.tertiarycourses.ai4kids.cards
 
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnySticker
+
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -111,7 +113,7 @@ fun BrainArcadeScreen(onClose: () -> Unit) {
                         }
                     }
                     Spacer(Modifier.size(if (landscape) 2.dp else 8.dp))
-                    Text("🕹️ Brain Arcade", color = Theme.Ink, fontSize = if (landscape) 26.sp else 34.sp, fontWeight = FontWeight.Black)
+                    Text("Brain Arcade", color = Theme.Ink, fontSize = if (landscape) 26.sp else 34.sp, fontWeight = FontWeight.Black)
                     Text(
                         if (loggedIn) "Quick card games — play solo, team up, or race your friends with a room code."
                         else "Quick card games you can play right now, on your own.",
@@ -143,11 +145,11 @@ private fun LoginPrompt(onLogin: () -> Unit) {
             .clickable(onClick = onLogin)
             .padding(horizontal = 18.dp, vertical = 14.dp),
     ) {
-        Text("🔓", fontSize = 26.sp)
+        SunnySticker("🔓", 36)
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
             Text("Log in for more games", color = Theme.Ink, fontSize = 16.sp, fontWeight = FontWeight.Black)
-            Text("Unlock every game and play with friends using a room code.", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text("Unlock every game and play with friends using a room code.", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 13.sp)
         }
         Text("Log in ▶", color = Theme.Purple, fontSize = 15.sp, fontWeight = FontWeight.Black)
     }
@@ -172,7 +174,7 @@ private fun GameCard(game: CardGameMeta, onClick: () -> Unit, compact: Boolean =
                     .clip(RoundedCornerShape(16.dp))
                     .background(game.accent.copy(alpha = 0.15f)),
             ) {
-                Text(game.emoji, fontSize = 30.sp)
+                SunnySticker(game.emoji, 44)
             }
             Spacer(Modifier.weight(1f))
             Box(
@@ -191,7 +193,7 @@ private fun GameCard(game: CardGameMeta, onClick: () -> Unit, compact: Boolean =
             }
         }
         Text(game.title, color = Theme.Ink, fontSize = 20.sp, fontWeight = FontWeight.Black)
-        Text(game.blurb, color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp)
+        Text(game.blurb, color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp)
         Spacer(Modifier.weight(1f))
         Box(
             modifier = Modifier

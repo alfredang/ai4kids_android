@@ -1,5 +1,7 @@
 package sg.com.tertiarycourses.ai4kids.cards
 
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnySticker
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,7 +75,7 @@ fun MemoryBoard(view: MemoryView, busy: Boolean, onMove: (JSONObject) -> Unit) {
     val cols = if (total <= 16) 4 else if (total <= 20) 5 else 6
 
     Column {
-        Text("Pairs found: ${view.pairsFound}/${view.pairsTotal}", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("Pairs found: ${view.pairsFound}/${view.pairsTotal}", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         LazyVerticalGrid(
             columns = GridCells.Fixed(cols),
@@ -125,7 +127,7 @@ fun DiscardBoard(view: DiscardView, busy: Boolean, onMove: (JSONObject) -> Unit)
     var selected by remember { mutableStateOf<Int?>(null) }
 
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Four piles — play higher, or a 10 to clear", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp)
+        Text("Four piles — play higher, or a 10 to clear", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             view.piles.forEachIndexed { i, top ->
                 val playable = view.yourTurn && selected != null && !busy
@@ -159,7 +161,7 @@ fun DiscardBoard(view: DiscardView, busy: Boolean, onMove: (JSONObject) -> Unit)
             }
         }
 
-        Text("Your cards", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("Your cards", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
         HandRow(view.yourHand, selectedIndices = selected?.let { setOf(view.yourHand.indexOf(it)) } ?: emptySet(), enabled = view.yourTurn && !busy) { idx ->
             selected = if (selected == view.yourHand[idx]) null else view.yourHand[idx]
         }
@@ -183,7 +185,7 @@ fun MathBoard(view: MathView, busy: Boolean, onMove: (JSONObject) -> Unit) {
         TargetChip("🎯 Target", view.target, Theme.Blue, Modifier.align(Alignment.CenterHorizontally))
         Text(
             "Pick 1 card = target, or 2 that add/subtract to it",
-            color = Theme.Ink.copy(alpha = 0.6f),
+            color = Theme.Ink.copy(alpha = 0.85f),
             fontSize = 13.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
@@ -232,7 +234,7 @@ fun BeatDieBoard(view: BeatDieView, busy: Boolean, onMove: (JSONObject) -> Unit)
         if (view.yourTurn && view.die == null) {
             KidButton(title = "Roll the die", color = if (busy) Theme.Ink.copy(alpha = 0.3f) else Theme.Green, enabled = !busy, onClick = { onMove(move("roll")) }, modifier = Modifier.align(Alignment.CenterHorizontally))
         } else {
-            Text("Discard 1–2 cards adding up to at least ${view.die ?: "?"}", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text("Discard 1–2 cards adding up to at least ${view.die ?: "?"}", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 13.sp)
             HandRow(view.yourHand, picked.toSet(), enabled = view.yourTurn && view.die != null && !busy) { idx ->
                 togglePick(picked, idx, max = 2)
             }
@@ -294,7 +296,7 @@ fun MakeTenBoard(view: MakeTenView, busy: Boolean, onMove: (JSONObject) -> Unit)
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("Round ${view.round}/${view.goal}", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("Round ${view.round}/${view.goal}", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             Text("⏱ ${secs}s", color = timerColor, fontSize = 16.sp, fontWeight = FontWeight.Black)
         }
@@ -381,7 +383,7 @@ fun WheelBoard(view: WheelView, busy: Boolean, onMove: (JSONObject) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             "Round ${view.round}/${view.roundsTotal} · Pick ${view.subround}/${view.subroundsTotal}",
-            color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+            color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold,
         )
 
         // The wheel — a strip of the remaining animals, one highlighted.
@@ -414,11 +416,11 @@ fun WheelBoard(view: WheelView, busy: Boolean, onMove: (JSONObject) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth().kidCard().padding(24.dp),
             ) {
-                Text("🏁", fontSize = 48.sp)
+                SunnySticker("🏁", 60)
                 Text("Final Round!", color = Theme.Ink, fontSize = 24.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
                 Text(
                     "Just one animal left — ${view.targetAnimal}. Get this card right to win!",
-                    color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp, textAlign = TextAlign.Center,
+                    color = Theme.Ink.copy(alpha = 0.85f), fontSize = 15.sp, textAlign = TextAlign.Center,
                 )
                 KidButton(title = "I'm ready! ▶", color = Theme.Orange, onClick = { ready = true })
             }
@@ -428,7 +430,7 @@ fun WheelBoard(view: WheelView, busy: Boolean, onMove: (JSONObject) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Find the card with", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 15.sp)
+                Text("Find the card with", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 15.sp)
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Theme.Orange.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 4.dp),
@@ -442,7 +444,7 @@ fun WheelBoard(view: WheelView, busy: Boolean, onMove: (JSONObject) -> Unit) {
             }
             Text(
                 "⏱ ${secs}s" + if (view.wrongPicks.isEmpty()) "" else "   ❌ no more chances left — choose carefully!",
-                color = if (urgent || view.wrongPicks.isNotEmpty()) Theme.Red else Theme.Ink.copy(alpha = 0.6f),
+                color = if (urgent || view.wrongPicks.isNotEmpty()) Theme.Red else Theme.Ink.copy(alpha = 0.85f),
                 fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
 
@@ -515,7 +517,7 @@ fun OddOneOutBoard(view: OddOneView, busy: Boolean, onMove: (JSONObject) -> Unit
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             "Round ${view.round}/${view.roundsTotal} · Pick ${view.subround}/${view.subroundsTotal}",
-            color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+            color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold,
         )
         Text(
             "Tap the card that's different",
@@ -528,7 +530,7 @@ fun OddOneOutBoard(view: OddOneView, busy: Boolean, onMove: (JSONObject) -> Unit
         }
         Text(
             "⏱ ${secs}s" + if (view.wrongPicks.isEmpty()) "" else "   ❌ one mistake — look closely!",
-            color = if (urgent || view.wrongPicks.isNotEmpty()) Theme.Red else Theme.Ink.copy(alpha = 0.6f),
+            color = if (urgent || view.wrongPicks.isNotEmpty()) Theme.Red else Theme.Ink.copy(alpha = 0.85f),
             fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
         )
 
@@ -638,7 +640,7 @@ fun AlphabetLockBoard(view: SeqView, busy: Boolean, onMove: (JSONObject) -> Unit
 
         Text(
             "${view.progress}/${view.total} in order",
-            color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+            color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -662,7 +664,7 @@ fun ShowdownBoard(view: ShowdownView, players: List<CardPlayer>, busy: Boolean, 
                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
                         .background(if (out) Theme.Ink.copy(alpha = 0.05f) else Color.White).padding(8.dp),
                 ) {
-                    Text("${p.avatar ?: "🙂"} ${p.name}${if (out) " ❌" else ""}", color = Theme.Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text("${p.name}${if (out) " — Out" else ""}", color = Theme.Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     Text(
                         "⭐".repeat(stars) + "☆".repeat((view.starsToWin - stars).coerceAtLeast(0)) + "  🃏${view.handCounts[p.learnerId] ?: 0}",
                         color = Theme.Orange, fontSize = 11.sp,
@@ -683,9 +685,9 @@ fun ShowdownBoard(view: ShowdownView, players: List<CardPlayer>, busy: Boolean, 
         }
 
         when {
-            view.youEliminated -> Text("You're out — watching the rest. 👀", color = Theme.Ink.copy(alpha = 0.5f), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            view.youEliminated -> Text("You're out — watching the rest.", color = Theme.Ink.copy(alpha = 0.5f), fontSize = 15.sp, fontWeight = FontWeight.Bold)
             committed -> Column {
-                Text("✅ Locked in: ${view.yourSelection!!.joinToString(" + ")}", color = Theme.Green, fontWeight = FontWeight.Bold)
+                Text("Locked in: ${view.yourSelection!!.joinToString(" + ")}", color = Theme.Green, fontWeight = FontWeight.Bold)
                 Text("Waiting for ${view.waitingOn} more player${if (view.waitingOn == 1) "" else "s"}…", color = Theme.Ink.copy(alpha = 0.45f), fontSize = 13.sp)
             }
             else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -723,7 +725,7 @@ fun MatchColoursBoard(view: MatchColoursView, players: List<CardPlayer>, busy: B
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             if (view.final) "🏁 Sudden-death round ${view.round}" else "Round ${view.round} / ${view.roundsTotal}",
-            color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+            color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
         // Scoreboard.
@@ -733,18 +735,18 @@ fun MatchColoursBoard(view: MatchColoursView, players: List<CardPlayer>, busy: B
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color.White).padding(8.dp),
                 ) {
-                    Text("${p.avatar ?: "🙂"} ${p.name}", color = Theme.Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(p.name, color = Theme.Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     val pts = view.points?.get(p.learnerId) ?: 0
                     Text(
                         "${view.scores[p.learnerId] ?: 0} pts" + if (result && pts > 0) "  +$pts" else "",
-                        color = if (result && pts > 0) Theme.Green else Theme.Ink.copy(alpha = 0.6f), fontSize = 11.sp,
+                        color = if (result && pts > 0) Theme.Green else Theme.Ink.copy(alpha = 0.85f), fontSize = 11.sp,
                     )
                 }
             }
         }
 
         if (!view.inRound) {
-            Text("👀 Watching the sudden-death round…", color = Theme.Ink.copy(alpha = 0.5f), fontSize = 15.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            Text("Watching the sudden-death round…", color = Theme.Ink.copy(alpha = 0.5f), fontSize = 15.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             return@Column
         }
 
@@ -787,7 +789,7 @@ fun MatchColoursBoard(view: MatchColoursView, players: List<CardPlayer>, busy: B
                 color = Theme.Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
             if (correct != null && correct in view.colours.indices) {
-                Text("Answer: ${view.colours[correct].emoji} ${view.colours[correct].label}", color = Theme.Ink.copy(alpha = 0.6f), fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text("Answer: ${view.colours[correct].emoji} ${view.colours[correct].label}", color = Theme.Ink.copy(alpha = 0.85f), fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
     }

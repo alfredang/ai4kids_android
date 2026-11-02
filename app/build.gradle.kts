@@ -40,11 +40,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "sg.com.tertiarycourses.ai4kids"
+        applicationId = "sg.com.tertiarycourses.ai4kidsapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.2"
+        versionCode = 6
+        versionName = "1.3"
 
         vectorDrawables { useSupportLibrary = true }
 
@@ -67,6 +67,11 @@ android {
 
     buildTypes {
         release {
+            // Store builds use the parent-authenticated backend, never bundled provider secrets.
+            buildConfigField("String", "GEMINI_API_KEY", "\"\"")
+            buildConfigField("String", "NVIDIA_API_KEY", "\"\"")
+            buildConfigField("String", "CLOUDFLARE_ACCOUNT_ID", "\"\"")
+            buildConfigField("String", "CLOUDFLARE_AI_TOKEN", "\"\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

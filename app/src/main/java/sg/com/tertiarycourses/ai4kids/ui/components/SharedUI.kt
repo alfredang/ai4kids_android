@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -28,7 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnyIcon as Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,11 +63,12 @@ fun Modifier.softShadow(shape: androidx.compose.ui.graphics.Shape) = this.shadow
 
 /** Wraps content in the standard rounded white "play card" surface. */
 fun Modifier.kidCard(cornerRadius: androidx.compose.ui.unit.Dp = Theme.CardCornerRadius): Modifier {
-    val shape = RoundedCornerShape(cornerRadius)
+    val shape = RoundedCornerShape(topStart=cornerRadius,topEnd=cornerRadius-8.dp,bottomEnd=cornerRadius+4.dp,bottomStart=cornerRadius-4.dp)
     return this
         .softShadow(shape)
         .clip(shape)
         .background(Color.White)
+        .border(2.dp, Theme.Purple.copy(alpha=.4f), shape)
 }
 
 /** A chunky, tappable primary button styled for small hands. */
@@ -268,7 +270,7 @@ fun CelebrationView(
                 .background(Theme.Purple)
                 .padding(horizontal = 44.dp, vertical = 36.dp),
         ) {
-            Text("🎉", fontSize = 80.sp)
+            SunnySticker("🎉", 100)
             if (title.isNotBlank()) {
                 Text(
                     text = title,

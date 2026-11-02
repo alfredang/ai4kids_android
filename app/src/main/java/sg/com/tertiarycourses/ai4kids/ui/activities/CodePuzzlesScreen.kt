@@ -1,5 +1,7 @@
 package sg.com.tertiarycourses.ai4kids.ui.activities
 
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnySticker
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,7 +30,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
+import sg.com.tertiarycourses.ai4kids.ui.components.SunnyIcon as Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -436,8 +438,8 @@ private fun Grid(level: Level, robot: Pair<Int, Int>, side: Dp = 60.dp) {
                             .background(if (isWall) Theme.Ink.copy(alpha = 0.8f) else Theme.Blue.copy(alpha = 0.12f)),
                     ) {
                         val glyph = (side.value * 0.56f).sp
-                        if (isGoal) Text("⭐️", fontSize = glyph)
-                        if (isRobot) Text("🤖", fontSize = glyph)
+                        if (isGoal) SunnySticker("⭐️", glyph.value.toInt())
+                        if (isRobot) SunnySticker("🤖", glyph.value.toInt())
                     }
                 }
             }
