@@ -14,6 +14,9 @@
 ### Privacy
 - The offline activities still collect nothing. When a parent turns AI Workshops on, only the text a child types in a workshop is sent to DeepSeek. No developer key is included in the app.
 
+### Play submission
+- Ships to the live package `sg.com.tertiarycourses.ai4kids` (applicationId switched back from the unpublished `…ai4kidsapp` draft), production track, versionCode 7.
+
 ## [1.3] — 2026-11-03 · versionCode 6
 
 ### Changed

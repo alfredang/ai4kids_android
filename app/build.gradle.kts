@@ -40,7 +40,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "sg.com.tertiarycourses.ai4kidsapp"
+        applicationId = "sg.com.tertiarycourses.ai4kids"
         minSdk = 24
         targetSdk = 36
         versionCode = 7

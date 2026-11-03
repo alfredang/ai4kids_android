@@ -24,9 +24,9 @@ playful activity artwork, sky-blue and lavender colours, and bundled Fraunces /
 Nunito fonts. Online games now require a parent to sign in and choose their own
 child’s profile. Offline activities remain available without an account.
 
-The new sales-account release uses package `sg.com.tertiarycourses.ai4kidsapp`.
-Its production submission is pending; the download links below currently refer
-to the existing public app (`sg.com.tertiarycourses.ai4kids`).
+Releases ship to the existing public app, package `sg.com.tertiarycourses.ai4kids`,
+now on the sales@tertiarycourses.com.sg developer account. (1.3 briefly used a
+separate `…ai4kidsapp` package; it was never published.)
 
 ## Screenshots
 
