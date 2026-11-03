@@ -19,14 +19,16 @@
 
 </div>
 
-Version 1.3 brings the website’s sunny bookworm, original illustrated controls,
-playful activity artwork, sky-blue and lavender colours, and bundled Fraunces /
-Nunito fonts. Online games now require a parent to sign in and choose their own
-child’s profile. Offline activities remain available without an account.
+Version 1.4 adds four **AI Workshops** — Storybook Studio, Mini Maker Studio, Maths
+Detectives and Science Explorers — behind an on-device **parent login** (PIN + the
+parent's own DeepSeek API key), and aligns the theme with the
+[family website](https://ai4kids.tertiarycourses.com.sg). Version 1.3 brought the
+website’s sunny bookworm, original illustrated controls and bundled Fraunces / Nunito
+fonts. Offline activities remain available without an account.
 
 Releases ship to the existing public app, package `sg.com.tertiarycourses.ai4kids`,
-now on the sales@tertiarycourses.com.sg developer account. (1.3 briefly used a
-separate `…ai4kidsapp` package; it was never published.)
+on the sales@tertiarycourses.com.sg developer account. (1.3 briefly used a separate
+`…ai4kidsapp` package; it was never published.)
 
 ## Screenshots
 
@@ -79,6 +81,33 @@ development builds.
 | 💬 **Talking Buddy** | 5–10 | Opens the family website after a grown-up check to chat with a friendly AI pal | Browser · Parent sign-in |
 | 🎨 **Art Studio** | 5–12 | Opens the family website after a grown-up check to make a picture and try a jigsaw | Browser · Parent sign-in |
 | 🧠 **Brain Arcade** | All | Ten **card games** — play solo, co-op, or versus friends | Online |
+
+### 🤖 AI Workshops (parent-unlocked)
+
+Four chats with **Sunny**, mirroring the website's December workshops. Each has
+tap-to-start chips so younger children don't have to type.
+
+| Workshop | Ages | What Sunny does |
+| --- | --- | --- |
+| 📖 **Storybook Studio** | 7–12 | Builds a Merlion-style adventure from the child's hero, place and twist |
+| 🎨 **Mini Maker Studio** | 7–12 | Plans a poster (title, slogan, picture ideas) and a 4-panel mini comic |
+| 🔍 **Maths Detectives** | 8–12 | Singapore-themed maths mysteries for P1–P6, with clues and bar-model hints |
+| 🔬 **Science Explorers** | 8–12 | Answers "why/how" questions and suggests a safe mini experiment |
+
+- **Locked by default.** The first tap opens a grown-up setup: create a 4–6 digit PIN,
+  paste a [DeepSeek API key](https://platform.deepseek.com/api_keys) (checked live via
+  `GET /models`) and give consent. Later visits need only the PIN.
+- **No developer key ships in the app** — usage is billed to the parent's own DeepSeek
+  account (`deepseek-flash`, thinking disabled).
+- The session locks when the app goes to the background, after 30 minutes, or on
+  **Lock now**. Five wrong PINs trigger a 60-second cooldown; **Forgot PIN** wipes the
+  PIN and key.
+- Every message passes `KidSafety` first (300-character cap; emails, phone numbers, NRIC,
+  addresses and passwords are blocked locally). Chat history is in memory only.
+- Parents' Corner can replace the key, change the PIN, or turn the workshops off.
+
+Shared spec with the [iOS app](https://github.com/alfredang/ai4kidsapp): same four
+workshops, prompts and parent-login rules.
 
 ### Phonics Quest — the seven worlds
 
@@ -143,12 +172,13 @@ authoritative). Modes vary per game: **Solo**, **Co-op**, and **Versus**.
 | **Game engine** | LibGDX 1.13.1 (the Escape Room — a self-contained `AndroidApplication`) |
 | **Architecture** | Single-Activity Compose home; the Escape Room runs as a separate LibGDX `Activity`; shared state via `CompositionLocal` |
 | **Audio** | Android `TextToSpeech` (on-device, offline) for Phonics |
-| **AI (optional)** | Google **Gemini** (`gemini-2.5-flash`) for text — Phonics Buddy, Story Builder, Talking Buddy, and story-idea/drawing safety checks. Images via **Cloudflare** Workers AI (Flux-1-schnell) with an **NVIDIA NIM (FLUX.1-dev)** fallback — Art Studio & Story Builder's "Write your own" illustrations |
+| **AI Workshops** | **DeepSeek** chat completions (`deepseek-flash`) with the parent's own key |
+| **AI (optional, dev builds)** | Google **Gemini** (`gemini-2.5-flash`) for text — Phonics Buddy, Story Builder, Talking Buddy, and story-idea/drawing safety checks. Images via **Cloudflare** Workers AI (Flux-1-schnell) with an **NVIDIA NIM (FLUX.1-dev)** fallback — Art Studio & Story Builder's "Write your own" illustrations |
 | **Networking** | OkHttp 4.12.0 (Brain Arcade, co-op Escape, and the optional AI activities) |
 | **Auth** | NextAuth credentials flow, session cookie persisted locally |
-| **Persistence** | `SharedPreferences` (activity + phonics stars, best times, session cookie) |
+| **Persistence** | `SharedPreferences` (stars, best times) · `EncryptedSharedPreferences` (session cookie, parent PIN hash + DeepSeek key) |
 | **Build** | Gradle (Kotlin DSL), Android Gradle Plugin 8.5.2 |
-| **SDK** | Min SDK 24 (Android 7.0) · Target/Compile SDK 34 · JVM 17 |
+| **SDK** | Min SDK 24 (Android 7.0) · Target/Compile SDK 36 · JVM 17 |
 
 ## Architecture
 
@@ -188,8 +218,12 @@ app/src/main/java/sg/com/tertiarycourses/ai4kids/
 ├── model/Activity.kt            # The home activities (title, color, age band, icon)
 ├── data/
 │   ├── ProgressStore.kt         # Local star tally, persisted to SharedPreferences
-│   └── ConsentStore.kt          # One-time parental consent flag (Families Policy)
+│   ├── ConsentStore.kt          # One-time parental consent flag (Families Policy)
+│   ├── ParentAuth.kt            # AI Workshops parent login: PIN, key, consent, 30-min session
+│   └── PinHasher.kt             # Salted SHA-256 PIN hashing (unit-tested)
 ├── ai/
+│   ├── DeepSeekClient.kt        # AI Workshops chat + key check (parent's own key)
+│   ├── KidSafety.kt             # Length cap + personal-info filter (unit-tested)
 │   ├── GeminiClient.kt          # Gemini text/JSON/chat + kid-safety classifiers (Phonics, Story, Buddy)
 │   ├── NvidiaClient.kt          # NVIDIA NIM (FLUX.1-dev) — image fallback (higher fidelity)
 │   ├── CloudflareClient.kt      # Cloudflare Workers AI (Flux-1-schnell) — primary image provider (fast)
@@ -199,6 +233,10 @@ app/src/main/java/sg/com/tertiarycourses/ai4kids/
 │   ├── RootScreen.kt            # Home grid of activity cards + Brain Arcade tile
 │   ├── ParentsCornerSheet.kt    # Privacy info + reset progress
 │   ├── components/SharedUI.kt   # KidButton, StarBadge, CloseButton, CelebrationView, IdeaChips
+│   ├── workshops/               # AI Workshops
+│   │   ├── Workshop.kt             # The four workshops, starter chips, system prompts
+│   │   ├── ParentLoginScreen.kt    # First-run setup (PIN + key + consent) and PIN login
+│   │   └── WorkshopScreen.kt       # Chat with Sunny
 │   └── activities/
 │       ├── StoryBuilderScreen.kt   # Build a story + Write your own (reader UI)
 │       ├── StoryEngine.kt          # Pure branching-story logic (unit-tested)
@@ -303,6 +341,10 @@ that up too.
 
 ## Privacy
 
+- **AI Workshops** are off until a parent sets them up. Then only the text a child types in
+  a workshop is sent to DeepSeek (`api.deepseek.com`) under the parent's own key, after the
+  local `KidSafety` filter. Nothing is stored off-device by the app; the PIN hash and key
+  stay in encrypted on-device storage, excluded from backup and transfer.
 - **Code Puzzles** and the **solo** Escape Room request **no network** and collect **no data**.
 - **Story Builder** and **Phonics Quest** are offline by default. When a Gemini API key is
   configured they can call Google's **Gemini** API: Story Builder's **"Build a story"**
@@ -339,8 +381,8 @@ that up too.
   consent persisted by `data/ConsentStore.kt`) and every online sign-in point — the Brain
   Arcade and the co-op Escape Room lobby — immediately before any data leaves the device.
   No ads, no analytics, no third-party tracking SDKs.
-- The only persisted data is local: star progress, solo best times, and (when signed in)
-  the online session cookie — stored **encrypted** (Android Keystore) and excluded from
+- The only persisted data is local: star progress, solo best times, the parent PIN hash and
+  DeepSeek key, and (when signed in) the online session cookie — stored **encrypted** (Android Keystore) and excluded from
   backup/transfer.
 
 ## Contributing
