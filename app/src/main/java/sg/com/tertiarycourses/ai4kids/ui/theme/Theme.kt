@@ -22,17 +22,34 @@ import sg.com.tertiarycourses.ai4kids.R
  * learners (ages 4–16).
  */
 object Theme {
-    // Brand palette (AI4Kids — playful, saturated). Mirrors the iOS values.
-    val Purple = Color(0xFF8653A4)
+    // Brand palette — matches the AI Kids website (ai4kids.tertiarycourses.com.sg).
+    // Mirrors the iOS values.
+    val Purple = Color(0xFF80549F)
     val Pink = Color(0xFFB53C72)
     val Orange = Color(0xFFB07A35)
-    val Yellow = Color(0xFFFFDA70)
+    val Yellow = Color(0xFFFFDC69)
     val Green = Color(0xFF38866C)
     val Blue = Color(0xFF438EAE)
-    val Teal = Color(0xFF31877D)
+    val Teal = Color(0xFF268081)
     val Red = Color(0xFFBF4D74)
 
-    val Ink = Color(0xFF505D87)
+    /** Deep ink — headings and primary text on cream. */
+    val Ink = Color(0xFF41467D)
+    /** Deepest ink, for the strongest contrast (button labels, borders). */
+    val DeepInk = Color(0xFF343C79)
+    /** Softer body ink for longer paragraphs. */
+    val BodyInk = Color(0xFF655184)
+    /** Plum — the website's primary button fill. */
+    val Plum = Color(0xFF99499B)
+    /** Soft website pink (decorative fills only; too light for text). */
+    val Coral = Color(0xFFF89B9D)
+
+    /** Warm cream page colour, card fill and secondary-button fill. */
+    val Cream = Color(0xFFFFF8EE)
+    val CardFill = Color(0xFFFFFEFA)
+    val ButtonCream = Color(0xFFFFFDF7)
+    /** Text-input border (website form fields). */
+    val InputBorder = Color(0xFFC5B6DA)
 
     val BodyFont = FontFamily(Font(R.font.aikidsbody_regular, FontWeight.Normal), Font(R.font.aikidsbody_bold, FontWeight.Bold))
     val DisplayFont = FontFamily(Font(R.font.aikidsdisplay_bold, FontWeight.Bold))
@@ -53,11 +70,16 @@ object Theme {
         blurRadius = 8f,
     )
 
-    /** The app-wide warm background gradient. */
+    /** Website-style secondary button shape: slightly uneven corners (18/22/17/20). */
+    val SecondaryButtonShape = RoundedCornerShape(topStart = 18.dp, topEnd = 22.dp, bottomEnd = 17.dp, bottomStart = 20.dp)
+    /** Website form-field shape. */
+    val InputShape = RoundedCornerShape(12.dp)
+
+    /** The app-wide warm cream background gradient (website `#FFF8EE` → `#FFF3DC`). */
     val Background = Brush.linearGradient(
         colors = listOf(
-            Color(0xFFEDF7FF),
-            Color(0xFFF4EFFF),
+            Cream,
+            Color(0xFFFFF3DC),
         ),
     )
 }
@@ -65,8 +87,8 @@ object Theme {
 private val AppColorScheme = lightColorScheme(
     primary = Theme.Purple,
     secondary = Theme.Pink,
-    background = Color(0xFFEDF7FF),
-    surface = Color.White,
+    background = Theme.Cream,
+    surface = Theme.CardFill,
     onPrimary = Color.White,
     onBackground = Theme.Ink,
     onSurface = Theme.Ink,

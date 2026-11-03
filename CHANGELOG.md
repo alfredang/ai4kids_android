@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4] — 2026-11-03 · versionCode 7
+
+### Added
+- AI Workshops with parent login, powered by DeepSeek: Storybook Studio, Mini Maker Studio, Maths Detectives and Science Explorers.
+- Parent Login: a parent PIN plus the parent's own DeepSeek API key, saved encrypted on the device. Locks when the app closes, after 30 minutes, or with "Lock now".
+- Kid-safety prompts and a personal-info filter on every workshop message. Chats are never saved.
+- Parents' Corner: AI Workshops status, Lock now, Replace key, Change PIN, Remove key & turn off AI.
+
+### Changed
+- Warm cream colours and website-style buttons, matching the AI Kids website.
+
+### Privacy
+- The offline activities still collect nothing. When a parent turns AI Workshops on, only the text a child types in a workshop is sent to DeepSeek. No developer key is included in the app.
+
 ## [1.3] — 2026-11-03 · versionCode 6
 
 ### Changed

@@ -59,6 +59,33 @@ All Gemini/Cloudflare usage stays fully offline when the keys are blank.
 
 ## Privacy posture
 
+**AI Workshops (1.4+).** A home-screen "AI Workshops" section (Storybook Studio,
+Mini Maker Studio, Maths Detectives, Science Explorers — `ui/workshops/`) calls the
+**DeepSeek** chat API (`ai/DeepSeekClient.kt`, model `deepseek-flash`, thinking
+disabled) using the **parent's own API key**. There is **no developer key** in the
+build — never add a DeepSeek key to `BuildConfig`/`local.properties`.
+
+- Locked behind the **Parent Login** (`ui/workshops/ParentLoginScreen.kt`): first
+  time = math `ParentalGate` → 4–6 digit PIN (+confirm) → parent's DeepSeek key
+  (validated with `GET /models`) → required consent checkbox. Returning = on-screen
+  PIN pad; 5 wrong PINs → 60 s cooldown (persisted); "Forgot PIN?" wipes PIN + key +
+  consent.
+- `data/ParentAuth.kt` stores the **salted SHA-256 PIN hash** (`data/PinHasher.kt`,
+  random 16-byte salt — never the PIN), the key and consent in Keystore-backed
+  `EncryptedSharedPreferences` (`ai4kids.parent.secure`), **excluded from backup
+  and device transfer** (`backup_rules.xml`, `data_extraction_rules.xml`).
+- The unlocked session is in-memory only and ends on background
+  (`MainActivity.onStop`), "Lock now", or after 30 minutes. A 401 from DeepSeek
+  auto-locks and flags the key for replacement.
+- **Only the text the child types in a workshop** (plus the fixed system prompt
+  and the last ≤10 turns, in-memory only) is sent to `api.deepseek.com`. Before
+  sending, `ai/KidSafety.kt` caps messages at 300 chars and blocks personal info
+  (emails, 7+ digit runs, NRIC/FIN, "my address"-style phrases); every workshop
+  uses the kid-safety system prompt in `KidSafety.SYSTEM_PREFIX`.
+- **Play Data safety must declare** App activity → *Other user-generated content*:
+  collected, shared with DeepSeek, app functionality, encrypted in transit,
+  optional — alongside the existing User IDs entry. Keep it in sync.
+
 Release 1.3 carries no AI provider credentials. In the standard keyless build,
 Talking Buddy, Art Studio and Story Builder's Write mode use `ParentOnlineActivity`:
 a fresh grown-up gate opens the corresponding fixed family-website URL in the
@@ -118,7 +145,11 @@ it fits this posture **and** update the privacy disclosure.
     Canvas, `BuddyVoice` on-device TTS)
   - `ui/activities/art/` — **Art Studio** (`ArtStudioScreen`, `JigsawBoard`)
   - `ai/` — `GeminiClient` (text/JSON/chat/image), `CloudflareClient` (Flux image
-    fallback), `ArtEngine` (safety-gate + generate orchestrator)
+    fallback), `ArtEngine` (safety-gate + generate orchestrator), `DeepSeekClient`
+    + `KidSafety` (AI Workshops)
+  - `data/ParentAuth.kt`, `data/PinHasher.kt` — AI Workshops parent login
+  - `ui/workshops/` — `Workshop` (the four workshops + prompts), `ParentLoginScreen`,
+    `WorkshopScreen`
   - `cards/` — online **Brain Arcade**: `CardApi.kt` (OkHttp + NextAuth client,
     Keystore-encrypted session), `LoginScreen.kt`, `BrainArcadeScreen.kt`,
     `CardGameScreen.kt`

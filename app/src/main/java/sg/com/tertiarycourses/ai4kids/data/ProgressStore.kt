@@ -39,6 +39,9 @@ class ProgressStore(context: Context) {
     /** Stars earned in a single activity. */
     fun stars(activity: Activity): Int = starsByActivity[activity.id] ?: 0
 
+    /** Stars earned in a free-form bucket (e.g. "workshop.maths"). */
+    fun stars(bucketId: String): Int = starsByActivity[bucketId] ?: 0
+
     /** Award [count] stars for an activity and persist immediately. */
     fun award(count: Int, activity: Activity) = award(count, activity.id)
 

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -67,8 +68,58 @@ fun Modifier.kidCard(cornerRadius: androidx.compose.ui.unit.Dp = Theme.CardCorne
     return this
         .softShadow(shape)
         .clip(shape)
-        .background(Color.White)
+        .background(Theme.CardFill)
         .border(2.dp, Theme.Purple.copy(alpha=.4f), shape)
+}
+
+/**
+ * Website-style secondary button: cream fill, 2dp deep-ink border, a hard
+ * (no-blur) 4dp offset shadow and slightly uneven corners. Used for "Lock now",
+ * quick-start chips and other secondary actions.
+ */
+@Composable
+fun KidSecondaryButton(
+    title: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    fontSize: androidx.compose.ui.unit.TextUnit = 18.sp,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val shape = Theme.SecondaryButtonShape
+    // Pressing "sinks" the button onto its hard shadow, like the website.
+    val sink = if (pressed && enabled) 3.dp else 0.dp
+    // propagateMinConstraints: a fixed width/height on [modifier] sizes the
+    // face too, while unconstrained uses (chips in a FlowRow) still wrap content.
+    Box(modifier = modifier.padding(bottom = 4.dp), propagateMinConstraints = true) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .offset(y = 4.dp)
+                .clip(shape)
+                .background(Theme.Ink.copy(alpha = if (enabled) 1f else 0.3f)),
+        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .offset(y = sink)
+                .clip(shape)
+                .background(Theme.ButtonCream)
+                .border(2.dp, Theme.Ink.copy(alpha = if (enabled) 1f else 0.3f), shape)
+                .clickableNoRipple(interaction, enabled, onClick)
+                .defaultMinSize(minHeight = 48.dp)
+                .padding(horizontal = 18.dp, vertical = 10.dp),
+        ) {
+            Text(
+                title,
+                color = Theme.Ink.copy(alpha = if (enabled) 1f else 0.4f),
+                fontSize = fontSize,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
 }
 
 /** A chunky, tappable primary button styled for small hands. */
@@ -77,7 +128,7 @@ fun KidButton(
     title: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    color: Color = Theme.Purple,
+    color: Color = Theme.Plum,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {

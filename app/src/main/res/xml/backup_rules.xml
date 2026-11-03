@@ -8,4 +8,6 @@
 -->
 <full-backup-content>
     <exclude domain="sharedpref" path="ai4kids.cards.secure.xml" />
+    <!-- AI Workshops parent PIN hash + the parent's own DeepSeek key. -->
+    <exclude domain="sharedpref" path="ai4kids.parent.secure.xml" />
 </full-backup-content>

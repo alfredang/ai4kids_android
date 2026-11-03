@@ -35,19 +35,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import sg.com.tertiarycourses.ai4kids.data.LocalProgressStore
+import sg.com.tertiarycourses.ai4kids.data.ParentAuth
+import sg.com.tertiarycourses.ai4kids.ui.components.KidSecondaryButton
+import sg.com.tertiarycourses.ai4kids.ui.workshops.ParentTask
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
 
 /**
- * Parents' Corner — explains the no-data-collection stance and offers a reset.
+ * Parents' Corner — explains the privacy stance, manages the AI Workshops
+ * parent login (status, Lock now, Replace key, Change PIN, Remove key & turn
+ * off AI) and offers a progress reset.
  * Android port of the iOS `ParentsCornerView`.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ParentsCornerSheet(onDismiss: () -> Unit) {
+fun ParentsCornerSheet(onDismiss: () -> Unit, onParentTask: (ParentTask) -> Unit) {
     val progress = LocalProgressStore.current
     var confirmReset by remember { mutableStateOf(false) }
+    var confirmRemoveAi by remember { mutableStateOf(false) }
+    val aiConfigured = ParentAuth.isConfigured
+    val aiUnlocked = ParentAuth.unlockedUntil > 0 && ParentAuth.isUnlocked()
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Theme.CardFill) {
         Column(
             verticalArrangement = Arrangement.spacedBy(18.dp),
             modifier = Modifier
@@ -62,6 +72,44 @@ fun ParentsCornerSheet(onDismiss: () -> Unit) {
             InfoRow(Icons.Filled.WifiOff, "Learning activities & solo card games play fully offline — no login needed")
             InfoRow(Icons.Filled.Block, "No ads, ever")
             InfoRow(Icons.Filled.ChildCare, "Designed for ages 4–16")
+
+            SectionTitle("Privacy")
+            Text(
+                "The offline play activities work without an account and collect nothing. The optional " +
+                    "AI Workshops are off until a parent sets a PIN and adds their own DeepSeek API key. " +
+                    "When on, only the text your child types in a workshop is sent to DeepSeek to generate " +
+                    "a reply. We don't run ads or analytics, and we never see your key or your child's " +
+                    "workshop messages. Online card games and co-op rooms are separate and need a parent sign-in.",
+                color = Theme.BodyInk,
+                fontSize = 15.sp,
+                lineHeight = 21.sp,
+            )
+
+            SectionTitle("AI Workshops")
+            InfoRow(
+                Icons.Filled.Lock,
+                when {
+                    !aiConfigured -> "Off — not set up. Set a parent PIN and add your own DeepSeek key to turn them on."
+                    ParentAuth.keyNeedsReplacing -> "On — but DeepSeek rejected the saved key. Replace it to continue."
+                    aiUnlocked -> "On · Unlocked (locks when the app closes, after 30 minutes, or when you tap Lock now)"
+                    else -> "On · Locked — your PIN opens them"
+                },
+            )
+            InfoRow(Icons.Filled.Wifi, "Only what your child types in a workshop goes to DeepSeek (api.deepseek.com). Chats are never saved.")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (!aiConfigured) {
+                    KidSecondaryButton("Set up AI Workshops", fontSize = 16.sp) { onParentTask(ParentTask.UNLOCK) }
+                } else {
+                    if (aiUnlocked) KidSecondaryButton("Lock now", fontSize = 16.sp) { ParentAuth.lock() }
+                    KidSecondaryButton("Replace key", fontSize = 16.sp) { onParentTask(ParentTask.REPLACE_KEY) }
+                    KidSecondaryButton("Change PIN", fontSize = 16.sp) { onParentTask(ParentTask.CHANGE_PIN) }
+                }
+            }
+            if (aiConfigured) {
+                TextButton(onClick = { confirmRemoveAi = true }) {
+                    Text("Remove key & turn off AI", color = Theme.Red, fontWeight = FontWeight.Bold)
+                }
+            }
 
             SectionTitle("Brain Arcade (online play)")
             InfoRow(Icons.Filled.Groups, "Optional multiplayer card games — play with friends using a room code")
@@ -97,6 +145,23 @@ fun ParentsCornerSheet(onDismiss: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (confirmRemoveAi) {
+        AlertDialog(
+            onDismissRequest = { confirmRemoveAi = false },
+            title = { Text("Turn off AI Workshops?") },
+            text = { Text("This deletes the parent PIN, your DeepSeek key and your consent from this device.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    ParentAuth.wipe()
+                    confirmRemoveAi = false
+                }) { Text("Remove & turn off", color = Theme.Red) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemoveAi = false }) { Text("Cancel") }
+            },
+        )
     }
 
     if (confirmReset) {

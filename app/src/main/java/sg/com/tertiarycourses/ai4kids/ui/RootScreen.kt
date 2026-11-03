@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Star
 import sg.com.tertiarycourses.ai4kids.ui.components.SunnyIcon as Icon
@@ -64,6 +65,12 @@ import sg.com.tertiarycourses.ai4kids.ui.components.StarBadge
 import sg.com.tertiarycourses.ai4kids.ui.components.kidCard
 import sg.com.tertiarycourses.ai4kids.ui.components.softShadow
 import sg.com.tertiarycourses.ai4kids.ui.theme.Theme
+import sg.com.tertiarycourses.ai4kids.data.ParentAuth
+import sg.com.tertiarycourses.ai4kids.ui.components.KidSecondaryButton
+import sg.com.tertiarycourses.ai4kids.ui.workshops.ParentLoginScreen
+import sg.com.tertiarycourses.ai4kids.ui.workshops.ParentTask
+import sg.com.tertiarycourses.ai4kids.ui.workshops.Workshop
+import sg.com.tertiarycourses.ai4kids.ui.workshops.WorkshopScreen
 
 /**
  * Home screen — a bright, friendly grid of the four learning activities plus a
@@ -75,6 +82,12 @@ fun RootScreen(modifier: Modifier = Modifier) {
     var selected by remember { mutableStateOf<Activity?>(null) }
     var showParents by remember { mutableStateOf(false) }
     var showArcade by remember { mutableStateOf(false) }
+    // AI Workshops: the open workshop (shown only while the parent session is
+    // unlocked — otherwise the Parent Login is shown in its place), and any
+    // parent task started from the Parents' Corner or the lock pill.
+    var workshop by remember { mutableStateOf<Workshop?>(null) }
+    var parentTask by remember { mutableStateOf<ParentTask?>(null) }
+    val unlocked = ParentAuth.unlockedUntil > 0 && ParentAuth.isUnlocked()
 
     val context = LocalContext.current
     val progress = LocalProgressStore.current
@@ -114,6 +127,17 @@ fun RootScreen(modifier: Modifier = Modifier) {
             null -> Unit
         }
         showArcade -> BrainArcadeScreen(onClose = { showArcade = false })
+        parentTask != null -> ParentLoginScreen(
+            task = parentTask!!,
+            onClose = { parentTask = null },
+            onDone = { parentTask = null },
+        )
+        workshop != null && !unlocked -> ParentLoginScreen(
+            task = ParentTask.UNLOCK,
+            onClose = { workshop = null },
+            onDone = { /* now unlocked — recomposition opens the workshop */ },
+        )
+        workshop != null -> WorkshopScreen(workshop = workshop!!, onClose = { workshop = null })
         else -> Box(modifier = modifier) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 320.dp),
@@ -133,13 +157,26 @@ fun RootScreen(modifier: Modifier = Modifier) {
                 item(key = "arcade") {
                     ArcadeCard(onOpen = { showArcade = true })
                 }
+                item(key = "workshops-header", span = { GridItemSpan(maxLineSpan) }) {
+                    WorkshopsHeader(
+                        unlocked = unlocked,
+                        onLock = { ParentAuth.lock() },
+                        onUnlock = { parentTask = ParentTask.UNLOCK },
+                    )
+                }
+                items(Workshop.entries.toList(), key = { "workshop-" + it.id }) { w ->
+                    WorkshopCard(w, unlocked = unlocked) { workshop = w }
+                }
             }
         }
     }
 
     // The Parents' Corner is a modal bottom sheet, fine to overlay the grid.
     if (showParents) {
-        ParentsCornerSheet(onDismiss = { showParents = false })
+        ParentsCornerSheet(
+            onDismiss = { showParents = false },
+            onParentTask = { task -> showParents = false; parentTask = task },
+        )
     }
 }
 
@@ -210,7 +247,7 @@ private fun Header(onParents: () -> Unit) {
                 fontWeight = FontWeight.Black,
             )
             Text(
-                "Little minds. Big ideas.",
+                "Little minds. Big adventures. Together.",
                 color = Theme.Ink.copy(alpha = 0.85f),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -260,6 +297,74 @@ private fun ActivityCard(activity: Activity, onClick: () -> Unit) {
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
                 Icon(Icons.Filled.Star,contentDescription=null,modifier=Modifier.size(25.dp))
                 Text("$stars stars",color=Theme.Ink,fontSize=16.sp,fontWeight=FontWeight.Bold)
+            }
+        }
+    }
+}
+
+/** "AI Workshops" section header with the Locked / Unlocked · Lock now pill. */
+@Composable
+private fun WorkshopsHeader(unlocked: Boolean, onLock: () -> Unit, onUnlock: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("AI Workshops", color = Theme.Purple, fontSize = 30.sp, fontWeight = FontWeight.Black, fontFamily = Theme.DisplayFont)
+            Text(
+                "Grown-up login needed · powered by DeepSeek",
+                color = Theme.BodyInk,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (unlocked) {
+            KidSecondaryButton(title = "Unlocked · Lock now", fontSize = 16.sp, onClick = onLock)
+        } else {
+            KidSecondaryButton(title = "🔒 Locked", fontSize = 16.sp, onClick = onUnlock)
+        }
+    }
+}
+
+/** A website-style workshop tile. Opens the workshop (via the Parent Login when locked). */
+@Composable
+private fun WorkshopCard(workshop: Workshop, unlocked: Boolean, onClick: () -> Unit) {
+    val progress = LocalProgressStore.current
+    val stars = progress.stars("workshop." + workshop.id)
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "workshopScale",
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        modifier = Modifier
+            .scale(scale)
+            .fillMaxWidth()
+            .heightIn(min = 175.dp)
+            .kidCard()
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(20.dp),
+    ) {
+        Image(painterResource(workshop.art), contentDescription = null, modifier = Modifier.size(104.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.weight(1f)) {
+            Text(workshop.ages, color = workshop.color, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(workshop.title, color = workshop.color, fontSize = 27.sp, fontWeight = FontWeight.Black, fontFamily = Theme.DisplayFont)
+            Text(workshop.tagline, color = Theme.Ink, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                if (unlocked) {
+                    Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(25.dp))
+                    Text("$stars stars", color = Theme.Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                } else {
+                    Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(25.dp))
+                    Text("Grown-up login", color = Theme.Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
